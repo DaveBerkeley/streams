@@ -45,16 +45,12 @@ class Cluster:
             # print a dummy node
             self.print_node(f=f, nest=nest, node=self, style="rounded", name=" ")
 
-        done = self.print_connections(f=f, this=self)
-
         for s in self.sub:
-            done += s.print_subgraph(f=f, nest=nest+1)
+            s.print_subgraph(f=f, nest=nest+1)
 
         print(pad, "}", file=f)
-        return done
 
-    def print_connections(self, f, this, done=[]):
-        done = done[:]
+    def print_connections(self, f, this):
         def get_payload(s):
             names = [ name for name, _ in s.layout ]
             return ",".join(names)
@@ -62,9 +58,6 @@ class Cluster:
             if this:
                 if (source not in self.streams) or (sink not in self.streams):
                     continue
-            if (source, sink) in done:
-                continue
-            done += [ (source, sink) ]
             p_in = get_payload(source)
             p_out = get_payload(sink)
             if p_in == p_out:
@@ -76,7 +69,6 @@ class Cluster:
                 payload = p_in + " -> " + p_out
             ni, no = id(source), id(sink)
             print(f' {ni} -> {no} [label="{payload}"]', file=f)
-        return done
 
     def print_dot(self, f):
         print("digraph D {", file=f)

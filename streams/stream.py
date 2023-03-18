@@ -21,10 +21,9 @@ class Stream:
 
     connections = []
 
-    def __init__(self, layout, name=None, group=None):
+    def __init__(self, layout, name=None):
         self.layout = layout
         self.name = name
-        self.group = group
         self.ready = Signal()
         self.valid = Signal()
         self.first = Signal()
@@ -117,13 +116,13 @@ class StreamInit(Elaboratable):
 
     def __init__(self, data, layout):
         assert len(data)
-        self.i = Stream(layout, name="StreamInit_i", group=self)
-        self.o = Stream(layout, name="StreamInit_o", group=self)
+        self.i = Stream(layout, name="StreamInit_i")
+        self.o = Stream(layout, name="StreamInit_o")
         self.clr = Signal()
 
         # internal stream from Array
         self.data = Array( [ self.i.cat_dict(d, flags=True) for d in data ] )
-        self.s = Stream(layout, name="StreamInit_s", group=self)
+        self.s = Stream(layout, name="StreamInit_s")
 
         self.idx = Signal(range(len(data)+1))
         self.done = Signal()
