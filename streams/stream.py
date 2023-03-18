@@ -3,73 +3,16 @@
 from amaranth import *
 from amaranth.sim import *
 
-from estream_sim import SinkSim, SourceSim
-
 #
 #
 
-def print_dot(connections, path):
-    nodes = {}
-    groups = {}
-
-    for source, sink, s in connections:
-        nodes[source] = True
-        nodes[sink] = True
-        for s in [ source, sink ]:
-            if s.group:
-                if s.group in groups:
-                    groups[s.group][s] = True
-                else:
-                    groups[s.group] = { s: True }
-
-    s = nodes.keys()
-    for i, node in enumerate(s):
-        if not node.name:
-            node.name = f"node_{i}"
-
-    def node_repr(node):
-        return id(node)
-    def print_node(node):
-        n = node_repr(node)
-        print(f'\t\t{n} [shape=box,style=filled,label="{node.name}"]', file=f)
-
-    f = open(path, "w")
-
-    print("digraph D {", file=f)
-
-    for node in nodes.keys():
-        if not node.group in groups:
-            print_node(node)
-
-    for i, (group, parts) in enumerate(groups.items()):
-        print(f"\tSubgraph cluster_x_{i}", "{", file=f)
-        print(f"\t\tcolor=blue;", file=f)
-        print(f"\t\tstyle=rounded;", file=f)
-        name = group.__class__.__name__
-        print(f'\t\tlabel = "{name}";', file=f)
-        for node in parts.keys():
-            print_node(node)
-        print("\t}", file=f)
-
-    def get_payload(s):
-        names = [ name for name, _ in s.layout ]
-        return ",".join(names)
-
-    print("\t", file=f)
-    for source, sink, s in connections:
-        p_in = get_payload(source)
-        p_out = get_payload(sink)
-        if p_in == p_out:
-            if p_in == "data":
-                payload = ""
-            else:
-                payload = p_in
-        else:
-            payload = p_in + " -> " + p_out
-        ni, no = node_repr(source), node_repr(sink)
-        print(f'\t{ni} -> {no} [label="{payload}"]', file=f)
-
-    print("}", file=f)
+def to_packet(data, field='data'):
+    p = []
+    for i, x in enumerate(data):
+        d = { 'first': i==0, 'last': i == (len(data)-1), }
+        d[field] = x
+        p.append(d)
+    return p
 
 #
 #
@@ -149,7 +92,7 @@ class Stream:
         return Cat(*data)
 
 #
-#
+#   Stream that simply drops all input
 
 class Sink(Elaboratable):
 
@@ -370,15 +313,9 @@ def sim_null(m, n):
 #
 #
 
-def to_packet(data, field='data'):
-    p = []
-    for i, x in enumerate(data):
-        d = { 'first': i==0, 'last': i == (len(data)-1), }
-        d[field] = x
-        p.append(d)
-    return p
-
 if __name__ == "__main__":
+    from sim import SinkSim, SourceSim
+
     layout = [ ( "data", 16 ), ]
     data = to_packet([ 0xabcd, 0xffff, 0xaaaa, 0x0000, 0x5555 ])
     dut = StreamInit(data, layout)
