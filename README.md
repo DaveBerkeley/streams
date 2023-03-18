@@ -8,7 +8,7 @@ from a source to a sink.
 
 The handshake is provided by the Source asserting 'valid' to show that the data is valid. The Sink asserts 'ready' to indicate that it has accepted the transfer.
 
-In addition to 'first'/'last; I discovered a need for 'first'/'last' signals to mark the start and end of blocks of data. I call these *packets*.
+In addition to 'valid'/'ready'; I discovered a need for 'first'/'last' signals to mark the start and end of blocks of data. I call these *packets*.
 
 There has been some discussion of how Streams should be implemented in [Amaranth](https://github.com/amaranth-lang/amaranth) : 
 [Stream Abstraction](https://github.com/amaranth-lang/amaranth/issues/317)
