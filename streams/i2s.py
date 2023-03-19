@@ -25,7 +25,7 @@ class I2SOutput(Elaboratable):
     def __init__(self, width):
         self.width = width
         layout = [ ("left", width), ("right", width) ]
-        self.i = Stream(layout=layout, name="I2S.i", group=self)
+        self.i = Stream(layout=layout, name="I2S.i")
         self.enable = Signal()
 
         self.phy = Phy()
