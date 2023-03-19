@@ -22,6 +22,6 @@ for fname in get_tests(dirname):
     name = dirname + "." + fname[:-3]
     print("run", name)
     m = importlib.import_module(name)
-    m.test()
+    m.test(verbose=True)
 
 #   FIN

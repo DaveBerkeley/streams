@@ -15,11 +15,47 @@ There has been some discussion of how Streams should be implemented in [Amaranth
 
 I needed Streams myself, so I put together some ideas. I decided to publish this as a work in progress. I'd welcome comments on the design. I hope that this will prove useful to the design of the Streams that eventually make their way into Amaranth.
 
+note :- When there is full Streams support in Amaranth I aim to retire this library. We don't want multiple competing designs. I hope that the design eventually adapted by Amaranth will be to some extent compatible with this library, perhaps through an adapter class.
+
+----
+
+Graph Generation
+----
+
 I'm keen on automatic generation of documentation and like diagrams, so I experimented with the automatic generation of interconnection diagrams using *dot*. This can produce examples like this : 
 
 ![dot diagram of Stream connections](dot_example.png)
 
 Stream objects are shown as grey boxes, the connections between them are shown as arrows : generated if you use the Stream.connect() funtion. Elaboratable objects are shown as rounded blue boxes. The code recurses down from the top module, looking for Elaboratable or Stream objects to draw. It uses [graphviz](https://www.graphviz.org/) to create the graphs using *dot*. I hope that the automated generaton of these diagrams might find wider application within Amaranth, not just for Streams.
+
+The code used to generate the graphs is in dot.py and is invoked (in this example) with :
+
+    if __name__ == "__main__":
+
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--prog", action="store_true")
+        parser.add_argument("--verbose", action="store_true")
+        args = parser.parse_args()
+
+        dut = Application()
+        platform = Platform()
+        platform.build(dut, do_program=args.prog, verbose=args.verbose)
+
+        dot_path = "/tmp/ulx3s.dot"
+        png_path = "stream.png"
+
+        from streams import dot
+        cluster = dot.get_clusters(dut)
+        f = open(dot_path, "w")
+        cluster.print_dot(f=f)
+        f.close()
+        dot.run(dot_path, png_path)
+
+
+----
+
+Requirements for a Streams library
+----
 
 During the course of development of Streams I made the following observations, in no particular order.
 
