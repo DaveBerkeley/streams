@@ -5,7 +5,6 @@
 from amaranth import *
 
 from streams import Stream
-from streams.sim import SinkSim, SourceSim 
 from streams.spi import SpiController
 
 #
