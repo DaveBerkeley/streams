@@ -34,7 +34,7 @@ In the class init method do :
 in elaborate() do :
 
         # Connect the phase source to the Cordic "z" input
-        m.d.comb += Stream.connect(self.phase.o, self.cordic.i, exclude=["phase"], mapping={"phase":"z"})
+        m.d.comb += Stream.connect(self.phase.o, self.cordic.i, mapping={"phase":"z"})
 
         # Set the Cordic x,y and DC offset defaults
         m.d.comb += self.cordic.i.x.eq(amplitude)
