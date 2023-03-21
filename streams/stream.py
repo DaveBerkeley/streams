@@ -260,6 +260,54 @@ class StreamTee(Elaboratable):
     def ports(self):
         return []
 
+#
+#    Join 2 Streams.
+#
+#    Wait until both inputs ready, read both and merge to output
     
+class Join(Elaboratable):
+
+    def __init__(self, width):
+        l1 = ("a", width)
+        l2 = ("b", width)
+        self.i = [
+            Stream(layout=[ l1 ], name="in1"),
+            Stream(layout=[ l2 ], name="in2"),
+        ]
+        # make sure they get graphed ...
+        self._1 = self.i[0]
+        self._2 = self.i[1]
+
+        self.o = Stream(layout=[ l1, l2 ], name="output")
+
+    def elaborate(self, platform):
+        m = Module()
+
+        # wait for all inputs valid before giving ready on both
+
+        valid = Cat( [ s.valid for s in self.i ] )
+        ready = Cat( [ s.ready for s in self.i ] )
+        on    = Cat( [ Const(1,1) for _ in self.i ] )
+
+        with m.If((valid == on) & ~self.o.valid):
+            m.d.sync += [
+                self.i[0].ready.eq(1),
+                self.i[1].ready.eq(1),
+            ]
+
+        with m.If((valid == on) & (ready == on)):
+            m.d.sync += self.o.valid.eq(1)
+            c = [
+                [   0, [ "valid", "ready" ] ],
+                [   1, [ "valid", "ready", "first", "last" ] ],
+            ]
+            for idx, exclude in c:
+                m.d.sync += self.i[idx].ready.eq(0)
+                m.d.sync += Stream.connect(self.i[idx], self.o, exclude=exclude)
+
+        with m.If(self.o.valid & self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
+
+        return m
 
 #   FIN

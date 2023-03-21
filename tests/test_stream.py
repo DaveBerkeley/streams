@@ -3,7 +3,7 @@
 from amaranth import *
 from amaranth.sim import *
 
-from streams.stream import to_packet, StreamInit, StreamNull, StreamTee
+from streams.stream import to_packet, StreamInit, StreamNull, StreamTee, Join
 from streams.sim import SourceSim, SinkSim
 
 #
@@ -166,7 +166,67 @@ def sim_tee(m, verbose):
     with sim.write_vcd(f"gtk/stream_tee_{wait}.vcd", traces=m.ports()):
         sim.run()
 
-##
+#
+#
+
+def sim_join(m, verbose):
+    print("test tee")
+    sim = Simulator(m)
+
+    a = SourceSim(m.i[0], verbose=verbose)
+    b = SourceSim(m.i[1], verbose=verbose)
+    sink = SinkSim(m.o)
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            yield from a.poll()
+            yield from b.poll()
+            yield from sink.poll()
+
+    def proc():
+        a_data = [
+            [   0,  [ 0x34, 0x22, 1, 2, 3, 4, ], ],
+            [   20, [ 0xff, ], ],
+            [   40, [ 0x45, 0xcd, 4, 5, 6, 7, ], ],
+            [   70, [ 0x34, 0x22, 0xff, 0 ], ],
+        ]
+        b_data = [
+            [   30,  [ 0x66, 0x44, 1, 2, 3, 4, ], ],
+            [   30,  [ 0xab, ], ],
+            [   80,  [ 0x66, 0x44, 1, 2, 3, 4, ], ],
+            [   65,  [ 1, 2, 3, 4, ], ],
+        ]
+
+        def push(s, data, field):
+            for t, p in data:
+                for i, d in enumerate(p):
+                    first = i == 0
+                    last = i == (len(p) - 1)
+                    dd = {
+                        'first' : i == 0,
+                        'last' : i == (len(p) - 1),
+                    }
+                    dd[field] = d
+                    s.push(t, **dd)
+
+        push(a, a_data, "a")
+        push(b, b_data, "b")
+
+        # simulate intermittant reading on sinks[1]
+        yield from tick(200)
+        aa = sink.get_data("a")
+        bb = sink.get_data("b")
+        for i, p in enumerate(zip(aa, bb)):
+            assert p == (a_data[i][1], b_data[i][1])
+
+    sim.add_clock(1 / 100e6)
+    sim.add_sync_process(proc)
+    with sim.write_vcd(f"gtk/stream_join.vcd", traces=[]):
+        sim.run()
+
+#
 #
 
 def test(verbose=False):
@@ -184,5 +244,8 @@ def test(verbose=False):
     sim_tee(dut, verbose)
     dut = StreamTee(3, layout, wait_all=True)
     sim_tee(dut, verbose)
+
+    dut = Join(8)
+    sim_join(dut, verbose)
 
 #   FIN
