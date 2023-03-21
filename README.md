@@ -44,7 +44,7 @@ in elaborate() do :
         # Connect the Cordic sine output to the DAC's data input
         m.d.comb += Stream.connect(self.cordic.o, self.dac.i, exclude=["y","z"], mapping={"x":"data"})
 
-Looking at the logic analyser output on the DAC's SPI lines, you can see the 0xf80000ff initialisation packet being sent as soon as the FPGA starts up. This is followed by a stream of sine data from the Cordic, setting the DAC output. The SpiController takes an optional init list that defines any initialisation sequence that should be sent to the device. The last flag controls the chip select, so you can define multiple word sequences if required.
+Looking at the logic analyser output on the DAC's SPI lines, you can see the 0xf80000ff initialisation packet being sent as soon as the FPGA starts up. This is followed by a stream of sine data from the Cordic, setting the DAC output (0xf30XXXFF). The SpiController takes an optional init list that defines any initialisation sequence that should be sent to the device. The last flag controls the chip select, so you can define multiple word sequences if required.
 
 ![Logic Analyser trace of SPI DAC init](scr_20230319090840.png)
 

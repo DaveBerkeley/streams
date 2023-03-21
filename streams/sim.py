@@ -2,11 +2,12 @@
 #   Test Class, acts as Sink
 
 class SinkSim:
-    def __init__(self, stream):
+    def __init__(self, stream, read_data=True):
         self.m = stream
         self._data = [ [] ]
         self.layout = stream.layout[:]
         self.layout += [ ("first", 1), ("last", 1), ]
+        self.read_data = read_data
 
     def reset(self):
         self._data = [ [] ]
@@ -29,7 +30,8 @@ class SinkSim:
                 record[name] = d
             self._data[-1].append(record)
         elif not r:
-            yield self.m.ready.eq(1)
+            if self.read_data:
+                yield self.m.ready.eq(1)
 
     def get_data(self, field=None): 
         if field:

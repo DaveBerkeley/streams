@@ -3,7 +3,7 @@
 from amaranth import *
 from amaranth.sim import *
 
-from streams.stream import to_packet, StreamInit, StreamNull
+from streams.stream import to_packet, StreamInit, StreamNull, StreamTee
 from streams.sim import SourceSim, SinkSim
 
 #
@@ -107,6 +107,68 @@ def sim_null(m, n, verbose):
 #
 #
 
+def sim_tee(m, verbose):
+    print("test null")
+    sim = Simulator(m)
+
+    src = SourceSim(m.i, verbose=verbose)
+    sinks = []
+    for i in range(len(m.o)):
+        sink = SinkSim(m.o[i])
+        sinks.append(sink)
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            yield from src.poll()
+            for sink in sinks:
+                yield from sink.poll()
+
+    def proc():
+        tx_data = [
+            [   0,  [ 0x1234, 0x2222, 1, 2, 3, 4, ], ],
+            [   20, [ 0xffff, ], ],
+            [   40, [ 0x2345, 0xabcd, 4, 5, 6, 7, ], ],
+            [   70, [ 0x1234, 0x2222, 0xffff, 0 ], ],
+        ]
+        for t, p in tx_data:
+            for i, d in enumerate(p):
+                first = i == 0
+                last = i == (len(p) - 1)
+                src.push(t, data=d, first=first, last=last)
+
+        # simulate intermittant reading on sinks[1]
+        yield from tick(10)
+        sinks[1].read_data = False
+        yield from tick(50)
+        sinks[1].read_data = True
+        yield from tick(5)
+        sinks[1].read_data = False
+        yield from tick(20)
+        sinks[1].read_data = True
+        yield from tick(50)
+
+        tx_p = []
+        for _, p in tx_data:
+            tx_p.append(p)
+
+        for i, sink in enumerate(sinks):
+            p = sink.get_data("data")
+            if m.wait_all or (i != 1):
+                assert p == tx_p, (i, p, tx_p)
+            else:
+                assert p != tx_p, (i, p, tx_p)
+
+    sim.add_clock(1 / 100e6)
+    sim.add_sync_process(proc)
+    wait = m.wait_all
+    with sim.write_vcd(f"gtk/stream_tee_{wait}.vcd", traces=m.ports()):
+        sim.run()
+
+##
+#
+
 def test(verbose=False):
     from streams.sim import SinkSim, SourceSim
 
@@ -117,5 +179,10 @@ def test(verbose=False):
 
     dut = StreamNull(3, layout)
     sim_null(dut, 3, verbose)
+
+    dut = StreamTee(3, layout, wait_all=False)
+    sim_tee(dut, verbose)
+    dut = StreamTee(3, layout, wait_all=True)
+    sim_tee(dut, verbose)
 
 #   FIN

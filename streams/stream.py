@@ -212,4 +212,54 @@ class StreamNull(Elaboratable):
     def ports(self):
         return []
 
+#
+#   Copy input to multiple outputs
+
+class StreamTee(Elaboratable):
+
+    def __init__(self, n, layout, wait_all=False):
+        self.wait_all = wait_all
+        self.i = Stream(layout, name="StreamTee_i")
+        self.o = []
+        for i in range(n):
+            s = Stream(layout, name=f"StreamTee_o[{i}]")
+            self.o += [ s ]
+            setattr(self, f"_o_{i}", s) # so that dot graph can find it!
+
+    def elaborate(self, platform):
+        m = Module()
+
+        with m.If(self.i.valid & self.i.ready):
+            m.d.sync += self.i.ready.eq(0)
+            for s in self.o:
+                exclude = [ "valid", "ready", ]
+                m.d.sync += Stream.connect(self.i, s, exclude=exclude)
+                m.d.sync += [
+                    s.valid.eq(1),
+                ]
+
+        for s in self.o:
+            with m.If(s.ready & s.valid):
+                m.d.sync += s.valid.eq(0)
+
+        with m.If(~self.i.ready):
+            if self.wait_all:
+                m.d.sync += self.i.ready.eq(1)
+                # but clear it if any of the outputs are still waiting?
+                for s in self.o:
+                    with m.If(s.valid):
+                        m.d.sync += self.i.ready.eq(0)
+            else:
+                # set i.ready if any of the outputs has no data to send
+                for s in self.o:
+                    with m.If(~s.valid):
+                        m.d.sync += self.i.ready.eq(1)
+
+        return m
+
+    def ports(self):
+        return []
+
+    
+
 #   FIN
