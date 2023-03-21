@@ -4,6 +4,12 @@ import sys
 import os
 import importlib
 
+# gtk subdirectory is used to save vcd and gtkwave config files
+gtk = "gtk"
+if not os.path.exists(gtk):
+    print("making subdir", gtk)
+    os.mkdir(gtk)
+
 dirname = "tests"
 
 sys.path.append(dirname)
