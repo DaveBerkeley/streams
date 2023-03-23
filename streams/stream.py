@@ -267,18 +267,40 @@ class StreamTee(Elaboratable):
     
 class Join(Elaboratable):
 
-    def __init__(self, width):
-        l1 = ("a", width)
-        l2 = ("b", width)
-        self.i = [
-            Stream(layout=[ l1 ], name="in1"),
-            Stream(layout=[ l2 ], name="in2"),
-        ]
-        # make sure they get graphed ...
-        self._1 = self.i[0]
-        self._2 = self.i[1]
+    @staticmethod
+    def is_layout(layout):
+        for name, width in layout:
+            print(name, width)
+            if not isinstance(name, str):
+                return False;
+            if not isinstance(width, int):
+                return False;
+        return True
 
-        self.o = Stream(layout=[ l1, l2 ], name="output")
+    @staticmethod
+    def has_field(layout, check):
+        names = [ x[0] for x in layout ]
+        for name, _ in check:
+            if name in names:
+                return True
+        return False
+
+    def __init__(self, **kwargs):
+        # eg Join(a=[("x", 12)], b=[("y", 12)])
+        self.i = []
+        layout = []
+        for i, (k, v) in enumerate(kwargs.items()):
+            assert not hasattr(self, k)
+            # check it is a valid layout
+            assert self.is_layout(v)
+            # check for duplicate fields
+            assert not self.has_field(layout, v)
+            s = Stream(layout=v, name=f"i[{i}]")
+            setattr(self, k, s)
+            self.i.append(s)
+            layout += v
+
+        self.o = Stream(layout=layout, name="out")
 
     def elaborate(self, platform):
         m = Module()
@@ -290,20 +312,16 @@ class Join(Elaboratable):
         on    = Cat( [ Const(1,1) for _ in self.i ] )
 
         with m.If((valid == on) & ~self.o.valid):
-            m.d.sync += [
-                self.i[0].ready.eq(1),
-                self.i[1].ready.eq(1),
-            ]
+            for s in self.i:
+                m.d.sync += s.ready.eq(1)
 
         with m.If((valid == on) & (ready == on)):
             m.d.sync += self.o.valid.eq(1)
-            c = [
-                [   0, [ "valid", "ready" ] ],
-                [   1, [ "valid", "ready", "first", "last" ] ],
-            ]
-            for idx, exclude in c:
+            exclude = [ "valid", "ready" ] # get first/last from i[0]
+            for idx in range(len(self.i)):
                 m.d.sync += self.i[idx].ready.eq(0)
                 m.d.sync += Stream.connect(self.i[idx], self.o, exclude=exclude)
+                exclude = [ "valid", "ready", "first", "last" ]
 
         with m.If(self.o.valid & self.o.ready):
             m.d.sync += self.o.valid.eq(0)

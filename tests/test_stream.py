@@ -170,7 +170,7 @@ def sim_tee(m, verbose):
 #
 
 def sim_join(m, verbose):
-    print("test tee")
+    print("test join")
     sim = Simulator(m)
 
     a = SourceSim(m.i[0], verbose=verbose)
@@ -245,7 +245,7 @@ def test(verbose=False):
     dut = StreamTee(3, layout, wait_all=True)
     sim_tee(dut, verbose)
 
-    dut = Join(8)
+    dut = Join(a=[("a", 8)], b=[("b", 8)])
     sim_join(dut, verbose)
 
 #   FIN
