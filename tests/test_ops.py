@@ -47,6 +47,7 @@ def sim_ops(m, check, vcd, verbose):
     sim.add_sync_process(proc)
     with sim.write_vcd("gtk/" + vcd, traces=m.ports()):
         sim.run()
+
 #
 #
 
@@ -83,6 +84,62 @@ def check_add_signed(data, result):
 #
 #
 
+def sim_sum(m, check, vcd, verbose):
+    print("test sum")
+    sim = Simulator(m)
+
+    src = SourceSim(m.i, verbose=verbose)
+    sink = SinkSim(m.o)
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            yield from src.poll()
+            yield from sink.poll()
+
+    def proc():
+
+        data = [
+            [ 1, 2, 3, 4, ],
+            [ 100, ],
+            [ 0, ],
+            [ -1, ],
+            [ -1, 1, ],
+            [ 1, 2, 4, 8, 16, 32, 64, ],
+            [ -1, -2, -4, -8, -16, -32, -64, ],
+        ]
+
+        for p in data:
+            for i, d in enumerate(p):
+                first = i == 0
+                last = i == (len(p) - 1)
+                src.push(10, data=d, first=first, last=last)
+
+        yield from tick(100)
+
+        check(data, sink.get_data("data"))
+
+    sim.add_clock(1 / 100e6)
+    sim.add_sync_process(proc)
+    with sim.write_vcd("gtk/" + vcd, traces=m.ports()):
+        sim.run()
+
+def check_sum(data, result):
+    for i, p in enumerate(data):
+        s = [ clip(x, 16) for x in p ]
+        ss = clip(sum(s), 32)
+        assert result[0][i] == ss, (i, p, result)
+
+def check_sum_signed(data, result):
+    for i, p in enumerate(data):
+        ss = sum(p)
+        ss = clip(ss, 32)
+        assert result[0][i] == ss, (i, p, result, ss)
+
+#
+#
+
 def test(verbose):
 
     dut = Mul(16, 32)
@@ -96,5 +153,11 @@ def test(verbose):
 
     dut = AddSigned(16, 32)
     sim_ops(dut, check_add_signed, "ops_adds.vcd", verbose)
+
+    dut = Sum(16, 32)
+    sim_sum(dut, check_sum, "ops_sum.vcd", verbose)
+
+    dut = SumSigned(16, 32)
+    sim_sum(dut, check_sum_signed, "ops_sums.vcd", verbose)
 
 #   FIN
