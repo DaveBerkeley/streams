@@ -58,7 +58,7 @@ class MulSigned(Mul):
         m.d.comb += [ sa.eq(a), sb.eq(b), ]
         return Mul.op(self, m, sa, sb)
 
-class AddSigned(BinaryOp):
+class AddSigned(Add):
 
     def op(self, m, a, b):
         sa = Signal(signed(a.shape().width))

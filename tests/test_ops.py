@@ -11,7 +11,7 @@ from streams.ops import *
 #
 #
 
-def sim_ops(m, check, verbose):
+def sim_ops(m, check, vcd, verbose):
     print("test binaryop")
     sim = Simulator(m)
 
@@ -45,7 +45,7 @@ def sim_ops(m, check, verbose):
 
     sim.add_clock(1 / 100e6)
     sim.add_sync_process(proc)
-    with sim.write_vcd("gtk/ops_mul.vcd", traces=m.ports()):
+    with sim.write_vcd("gtk/" + vcd, traces=m.ports()):
         sim.run()
 #
 #
@@ -86,15 +86,15 @@ def check_add_signed(data, result):
 def test(verbose):
 
     dut = Mul(16, 32)
-    sim_ops(dut, check_mul, verbose)
+    sim_ops(dut, check_mul, "ops_mul.vcd", verbose)
 
     dut = MulSigned(16, 32)
-    sim_ops(dut, check_mul_signed, verbose)
+    sim_ops(dut, check_mul_signed, "ops_muls.vcd", verbose)
 
     dut = Add(16, 32)
-    sim_ops(dut, check_add, verbose)
+    sim_ops(dut, check_add, "ops_add.vcd", verbose)
 
     dut = AddSigned(16, 32)
-    sim_ops(dut, check_add_signed, verbose)
+    sim_ops(dut, check_add_signed, "ops_adds.vcd", verbose)
 
 #   FIN
