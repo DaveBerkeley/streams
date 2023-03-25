@@ -3,7 +3,7 @@
 from amaranth import *
 from amaranth.sim import *
 
-from streams.stream import to_packet, StreamInit, StreamNull, StreamTee, Join
+from streams.stream import to_packet, StreamInit, StreamNull, StreamTee, Join, Split
 from streams.sim import SourceSim, SinkSim
 
 #
@@ -229,23 +229,80 @@ def sim_join(m, verbose):
 #
 #
 
+def sim_split(m, verbose):
+    print("test split")
+    sim = Simulator(m)
+
+    src = SourceSim(m.i, verbose=verbose)
+    sink_a = SinkSim(m.a)
+    sink_b = SinkSim(m.b)
+    sink_c = SinkSim(m.c)
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            yield from src.poll()
+            yield from sink_a.poll()
+            yield from sink_b.poll()
+            yield from sink_c.poll()
+
+    def proc():
+
+        data = [
+            [   1, 2, 3, ],
+            [   4, 5, 6, ],
+            [   7, 8, 9, ],
+        ]
+
+        for i, (a, b, c) in enumerate(data):
+            first = i == 0
+            last = i == (len(data) - 1)
+            src.push(10, a=a, b=b, c=c, first=first, last=last)
+
+        # simulate intermittant reading on sinks[1]
+        yield from tick(200)
+        a = sink_a.get_data("a")
+        b = sink_b.get_data("b")
+        c = sink_c.get_data("c")
+        #for i, p in enumerate(zip(aa, bb)):
+        #    assert p == (a_data[i][1], b_data[i][1])
+        print(a)
+        print(c)
+        print(b)
+        x = zip(a, b, c)
+        print([ x for x in zip(*data) ])
+        print("TODO")
+
+    sim.add_clock(1 / 100e6)
+    sim.add_sync_process(proc)
+    with sim.write_vcd(f"gtk/stream_join.vcd", traces=[]):
+        sim.run()
+
+#
+#
+
 def test(verbose=False):
     from streams.sim import SinkSim, SourceSim
 
-    layout = [ ( "data", 16 ), ]
-    data = to_packet([ 0xabcd, 0xffff, 0xaaaa, 0x0000, 0x5555 ])
-    dut = StreamInit(data, layout)
-    sim_init(dut, data, verbose)
+    if 1:
+        layout = [ ( "data", 16 ), ]
+        data = to_packet([ 0xabcd, 0xffff, 0xaaaa, 0x0000, 0x5555 ])
+        dut = StreamInit(data, layout)
+        sim_init(dut, data, verbose)
 
-    dut = StreamNull(3, layout)
-    sim_null(dut, 3, verbose)
+        dut = StreamNull(3, layout)
+        sim_null(dut, 3, verbose)
 
-    dut = StreamTee(3, layout, wait_all=False)
-    sim_tee(dut, verbose)
-    dut = StreamTee(3, layout, wait_all=True)
-    sim_tee(dut, verbose)
+        dut = StreamTee(3, layout, wait_all=False)
+        sim_tee(dut, verbose)
+        dut = StreamTee(3, layout, wait_all=True)
+        sim_tee(dut, verbose)
 
-    dut = Join(a=[("a", 8)], b=[("b", 8)])
-    sim_join(dut, verbose)
+        dut = Join(first_field="a", a=[("a", 8)], b=[("b", 8)])
+        sim_join(dut, verbose)
+
+    dut = Split(layout=[("a", 12), ("b", 8), ("c", 8)])
+    sim_split(dut, verbose)
 
 #   FIN

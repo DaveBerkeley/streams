@@ -1,6 +1,5 @@
 
 from amaranth import *
-from amaranth.sim import *
 
 #
 #
@@ -219,12 +218,12 @@ class StreamTee(Elaboratable):
 
     def __init__(self, n, layout, wait_all=False):
         self.wait_all = wait_all
-        self.i = Stream(layout, name="StreamTee_i")
+        self.i = Stream(layout, name="in")
         self.o = []
         for i in range(n):
-            s = Stream(layout, name=f"StreamTee_o[{i}]")
+            s = Stream(layout, name=f"out[{i}]")
             self.o += [ s ]
-            setattr(self, f"_o_{i}", s) # so that dot graph can find it!
+            setattr(self, f"_o{i}", s) # so that dot graph can find it!
 
     def elaborate(self, platform):
         m = Module()
@@ -234,9 +233,7 @@ class StreamTee(Elaboratable):
             for s in self.o:
                 exclude = [ "valid", "ready", ]
                 m.d.sync += Stream.connect(self.i, s, exclude=exclude)
-                m.d.sync += [
-                    s.valid.eq(1),
-                ]
+                m.d.sync += s.valid.eq(1)
 
         for s in self.o:
             with m.If(s.ready & s.valid):
@@ -261,9 +258,9 @@ class StreamTee(Elaboratable):
         return []
 
 #
-#    Join 2 Streams.
+#    Join N Streams.
 #
-#    Wait until both inputs ready, read both and merge to output
+#    Wait until all inputs ready, read all and merge to output
     
 class Join(Elaboratable):
 
@@ -285,22 +282,27 @@ class Join(Elaboratable):
                 return True
         return False
 
-    def __init__(self, **kwargs):
+    def __init__(self, first_field=None, **kwargs):
+        self.first_field = first_field
         # eg Join(a=[("x", 12)], b=[("y", 12)])
         self.i = []
-        layout = []
-        for i, (k, v) in enumerate(kwargs.items()):
-            assert not hasattr(self, k)
+        layouts = []
+        self.fields = []
+        for i, (name, layout) in enumerate(kwargs.items()):
+            # check we aren't overwriting anything
+            assert not hasattr(self, name)
             # check it is a valid layout
-            assert self.is_layout(v)
+            assert self.is_layout(layout)
             # check for duplicate fields
-            assert not self.has_field(layout, v)
-            s = Stream(layout=v, name=f"i[{i}]")
-            setattr(self, k, s)
+            assert not self.has_field(layouts, layout)
+            s = Stream(layout=layout, name=f"i[{i}]")
+            setattr(self, name, s)
+            print("join", s, name, layout)
             self.i.append(s)
-            layout += v
+            layouts += layout
+            self.fields.append(name)
 
-        self.o = Stream(layout=layout, name="out")
+        self.o = Stream(layout=layouts, name="out")
 
     def elaborate(self, platform):
         m = Module()
@@ -317,14 +319,61 @@ class Join(Elaboratable):
 
         with m.If((valid == on) & (ready == on)):
             m.d.sync += self.o.valid.eq(1)
-            exclude = [ "valid", "ready" ] # get first/last from i[0]
             for idx in range(len(self.i)):
+                if self.fields[idx] == self.first_field:
+                    exclude = [ "valid", "ready" ] # get first/last from this stream
+                else:
+                    exclude = [ "valid", "ready", "first", "last" ]
                 m.d.sync += self.i[idx].ready.eq(0)
                 m.d.sync += Stream.connect(self.i[idx], self.o, exclude=exclude)
-                exclude = [ "valid", "ready", "first", "last" ]
 
         with m.If(self.o.valid & self.o.ready):
             m.d.sync += self.o.valid.eq(0)
+
+        return m
+
+#
+#   Split : takes input stream with multiple payloads, splits into N output streams,
+#   one for each payload.
+
+class Split(Elaboratable):
+
+    def __init__(self, layout):
+        self.i = Stream(layout=layout, name="in")
+
+        for name, width in layout:
+            s = Stream(layout=[ (name, width), ], name=name)
+            setattr(self, name, s)
+
+    def elaborate(self, platform):
+        m = Module()
+
+        # Tx outputs
+        for name, _ in self.i.layout:
+            s = getattr(self, name)
+            with m.If(s.valid & s.ready):
+                m.d.sync += s.valid.eq(0)
+
+        # If all outputs are ready, accept input
+        with m.If(~self.i.ready):
+            m.d.sync += self.i.ready.eq(1)
+            for name, _ in self.i.layout:
+                s = getattr(self, name)
+                with m.If(s.valid):
+                    m.d.sync += self.i.ready.eq(0)
+                    
+        # read input
+        with m.If(self.i.valid & self.i.ready):
+            m.d.sync += self.i.ready.eq(0)
+            # copy each payload to its output
+            for name, _ in self.i.layout:
+                s = getattr(self, name)
+                f = getattr(s, name)
+                v = getattr(self.i, name)
+                m.d.sync += [
+                    f.eq(v),
+                    s.valid.eq(1),
+                ]
 
         return m
 
