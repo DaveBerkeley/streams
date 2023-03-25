@@ -104,4 +104,11 @@ def run(dot, png):
     subprocess.call(cmd, shell=True)
     print("generated", png)
 
+def graph(m, d_path, p_path):
+    f = open(d_path, "w")
+    c = get_clusters(m)
+    c.print_dot(f)
+    f.close()
+    run(d_path, p_path)
+
 #   FIN
