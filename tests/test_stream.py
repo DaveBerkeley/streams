@@ -3,7 +3,7 @@
 from amaranth import *
 from amaranth.sim import *
 
-from streams.stream import to_packet, StreamInit, StreamNull, StreamTee, Join, Split
+from streams.stream import to_packet, StreamInit, StreamNull, Tee, Join, Split
 from streams.sim import SourceSim, SinkSim
 
 #
@@ -294,9 +294,9 @@ def test(verbose=False):
         dut = StreamNull(3, layout)
         sim_null(dut, 3, verbose)
 
-        dut = StreamTee(3, layout, wait_all=False)
+        dut = Tee(3, layout, wait_all=False)
         sim_tee(dut, verbose)
-        dut = StreamTee(3, layout, wait_all=True)
+        dut = Tee(3, layout, wait_all=True)
         sim_tee(dut, verbose)
 
         dut = Join(first_field="a", a=[("a", 8)], b=[("b", 8)])

@@ -173,7 +173,7 @@ class StreamInit(Elaboratable):
 #   Eat the first N words in a Stream
 
 class StreamNull(Elaboratable):
-    
+ 
     def __init__(self, n, layout):
         self.n = n
         self.i = Stream(layout)
@@ -214,7 +214,7 @@ class StreamNull(Elaboratable):
 #
 #   Copy input to multiple outputs
 
-class StreamTee(Elaboratable):
+class Tee(Elaboratable):
 
     def __init__(self, n, layout, wait_all=False):
         self.wait_all = wait_all
@@ -267,7 +267,6 @@ class Join(Elaboratable):
     @staticmethod
     def is_layout(layout):
         for name, width in layout:
-            print(name, width)
             if not isinstance(name, str):
                 return False;
             if not isinstance(width, int):
@@ -297,7 +296,7 @@ class Join(Elaboratable):
             assert not self.has_field(layouts, layout)
             s = Stream(layout=layout, name=f"i[{i}]")
             setattr(self, name, s)
-            print("join", s, name, layout)
+            #print("join", s, name, layout)
             self.i.append(s)
             layouts += layout
             self.fields.append(name)
@@ -361,7 +360,7 @@ class Split(Elaboratable):
                 s = getattr(self, name)
                 with m.If(s.valid):
                     m.d.sync += self.i.ready.eq(0)
-                    
+
         # read input
         with m.If(self.i.valid & self.i.ready):
             m.d.sync += self.i.ready.eq(0)
