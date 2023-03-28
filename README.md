@@ -85,6 +85,31 @@ The code used to generate the graphs is in dot.py and is invoked (in this exampl
 
 
 ----
+Stream Operations
+----
+
+Streams can be used for more than passing data from A to B. They can perform in-line oeprations, gather stats etc.
+
+I've added
+[ops.py](https://github.com/DaveBerkeley/streams/blob/master/streams/ops.py)
+to illustrate this. 
+It contains binary opertions _Mul_ and _Add_ (along with their signed versions).
+These take two inputs ('a' and 'b') and produce a 'data' output which is the product
+or sum of the 2 inputs.
+The _Sum_ module takes an input packet, bounded by 'first' 'last' flags, and produces the
+sum of the inputs.
+
+Further operations can easily be added. These allow signal processing to be performed on streams.
+
+These can be extended to suport [gnuradio](https://www.gnuradio.org/) style flowgraphs.
+
+These blocks can be combined to produce more complex units : for example, a 
+[MAC](https://en.wikipedia.org/wiki/Multiply%E2%80%93accumulate_operation)
+unit is simply a multiplier (Mul) followed by an integrator (Sum).
+
+![MAC unit](mac.png)
+
+----
 
 Requirements for a Streams library
 ----
@@ -114,5 +139,6 @@ I've implemented the following :
 * helper Stream classes : StreamInit - which can prepend a data stream to the input. StreamNullSink - which can eat N words or N Packets. A StreamInit can be initialised like and ROM and used to eg send initialisation parameters to a SPI peripheral on boot, or send a preamble at the start of a packet. Sink can simply eat data, useful during development to flush output data.
 * need good simulation sink / source classes to assist with unit tests for new designs. In fact the whole Stream architecture makes unit tests much simpler. You can often simply push data to the input sim stream, collect packets at the output and assert that they are what you expected. SourceSim and SinkSim.
 * SPI example: the last flag can be used to force chip-select de-assert. So the packet translates to SPI data bursts. The Rx side can do the same thing, adding first last flags, so you can transparently send (single payload) packets over a SPI interface.
+* Operations on streams allow DSP functions to be performed - much like [gnuradio](https://www.gnuradio.org/) flowgraphs.
 
 Very much a work in progress.
