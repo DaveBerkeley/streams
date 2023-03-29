@@ -77,23 +77,18 @@ The code used to generate the graphs is in dot.py and is invoked (in this exampl
         png_path = "stream.png"
 
         from streams import dot
-        cluster = dot.get_clusters(dut)
-        f = open(dot_path, "w")
-        cluster.print_dot(f=f)
-        f.close()
-        dot.run(dot_path, png_path)
-
+        dot.graph(dot_path, png_path)
 
 ----
 Stream Operations
 ----
 
-Streams can be used for more than passing data from A to B. They can perform in-line oeprations, gather stats etc.
+Streams can be used for more than passing data from A to B. They can perform in-line operations, gather stats etc.
 
 I've added
 [ops.py](https://github.com/DaveBerkeley/streams/blob/master/streams/ops.py)
 to illustrate this. 
-It contains binary opertions _Mul_ and _Add_ (along with their signed versions).
+It contains binary operations _Mul_ and _Add_ (along with their signed versions).
 These take two inputs ('a' and 'b') and produce a 'data' output which is the product
 or sum of the 2 inputs.
 The _Sum_ module takes an input packet, bounded by 'first' 'last' flags, and produces the
@@ -108,6 +103,8 @@ These blocks can be combined to produce more complex units : for example, a
 unit is simply a multiplier (Mul) followed by an integrator (Sum).
 
 ![MAC unit](mac.png)
+
+Operations will automatically be pipelined as the valid/ready handshakes set the pace of the data flow.
 
 ----
 
