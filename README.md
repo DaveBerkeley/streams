@@ -54,7 +54,7 @@ Looking at the logic analyser output on the DAC's SPI lines, you can see the 0xf
 Graph Generation
 ----
 
-I'm keen on automatic generation of documentation and like diagrams, so I experimented with the automatic generation of interconnection diagrams using *dot*. It can produce examples like this : 
+I'm keen on automatic generation of documentation and I like diagrams, so I experimented with the automatic generation of interconnection diagrams using *dot*. It can produce examples like this : 
 
 ![dot diagram of Stream connections](dot_example.png)
 

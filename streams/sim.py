@@ -1,25 +1,22 @@
 #
-#   Test Class, acts as Sink
+#   Test Class, acts as passive Monitor
 
-class SinkSim:
-    def __init__(self, stream, read_data=True):
+class MonitorSim:
+    def __init__(self, stream, name="MonitorSim"):
         self.m = stream
+        self.name = name
         self._data = [ [] ]
         self.layout = stream.layout[:]
         self.layout += [ ("first", 1), ("last", 1), ]
-        self.read_data = read_data
 
     def reset(self):
         self._data = [ [] ]
-        yield self.m.ready.eq(0)
 
     def poll(self):
         r = yield self.m.ready
         v = yield self.m.valid
         f = yield self.m.first
-        l = yield self.m.last
         if r and v:
-            yield self.m.ready.eq(0)
             if f:
                 if len(self._data[0]):
                     self._data += [ [ ] ]
@@ -29,14 +26,33 @@ class SinkSim:
                 d = yield s
                 record[name] = d
             self._data[-1].append(record)
-        elif not r:
-            if self.read_data:
-                yield self.m.ready.eq(1)
 
     def get_data(self, field=None): 
         if field:
             return [ [ d[field] for d in p ] for p in self._data ]
         return self._data
+
+#
+#   Test Class, acts as Sink
+
+class SinkSim(MonitorSim):
+    def __init__(self, stream, name="SinkSim", read_data=True):
+        MonitorSim.__init__(self, stream, name=name)
+        self.read_data = read_data
+
+    def reset(self):
+        MonitorSim.reset(self)
+        yield self.m.ready.eq(0)
+
+    def poll(self):
+        yield from MonitorSim.poll(self)
+        r = yield self.m.ready
+        v = yield self.m.valid
+        if r and v:
+            yield self.m.ready.eq(0)
+        elif not r:
+            if self.read_data:
+                yield self.m.ready.eq(1)
 
 #
 #   Test Class : acts as source
