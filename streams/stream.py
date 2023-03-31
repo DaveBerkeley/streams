@@ -30,37 +30,43 @@ class Stream:
             setattr(self, name, Signal(width, name=name))
 
     @staticmethod
-    def connect(source, sink, exclude=[], mapping={}):
+    def connect(source, sink, exclude=[], mapping={}, fn={}):
         # use with eg.
-        # m.d.comb += src.connect(sink, exclude=["first","last"], mapping={"x":"data"})
+        # m.d.comb += src.connect(sink, exclude=["first","last"], mapping={"x":"data"}, fn={"x":shift_x})
         statements = []
+
+        def op(name, i, o):
+            f = fn.get(name)
+            if f is None:
+                return [ o.eq(i) ]
+            return [ f(name, i, o) ]
 
         for name in [ "valid", "first", "last" ]:
             if not name in exclude:
                 i = getattr(source, name)
                 o = getattr(sink, name)
-                statements += [ o.eq(i) ]
+                statements += op(name, i, o)
 
         for name in [ "ready" ]:
             if not name in exclude:
                 i = getattr(sink, name)
                 o = getattr(source, name)
-                statements += [ o.eq(i) ]
+                statements += op(name, i, o)
 
         for name, _ in source.layout:
             if not name in exclude:
                 oname = mapping.get(name, name)
                 i = getattr(source, name)
                 o = getattr(sink, oname)
-                statements += [ o.eq(i) ]
+                statements += op(name, i, o)
 
         # Used by the dot graph generation to track connections
         Stream.connections += [ (source, sink, statements), ]
 
         return statements
 
-    def connect_sink(self, sink, exclude=[], mapping={}):
-        return Stream.connect(self, sink, exclude=exclude, mapping=mapping)
+    def connect_sink(self, sink, exclude=[], mapping={}, fn={}):
+        return Stream.connect(self, sink, exclude=exclude, mapping=mapping, fn=fn)
 
     def _get_layout(self, flags=False):
         layout = self.layout[:]

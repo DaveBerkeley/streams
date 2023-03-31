@@ -48,6 +48,29 @@ Looking at the logic analyser output on the DAC's SPI lines, you can see the 0xf
 
 ![Logic Analyser trace of SPI DAC init](scr_20230319090840.png)
 
+----
+Passing functions to connect()
+----
+
+Sometimes you want to perform operaion on data, rather than simply copying it from stream A to B. The Stream.connect() function allows a function to be specified that can supply the opreation. 
+
+For example, a MAC stage has a 28-bit output accumulator. You want to shift this into a 12-bit output by taking the high bits.
+
+
+        # MAC has 28-bit output : (width * 2) + (bits_for(samples)-1)
+        # do a signed shift back to 12-bits
+        def scale(name, src, sink):
+            b_src = src.shape().width
+            b_sink = sink.shape().width
+            shift = b_src - b_sink
+            s = Signal(signed(b_src))
+            m.d.comb += [ s.eq(src) ]
+            return [ sink.eq(s >> shift) ]
+
+        # join the sin/cos MAC stages to provide scaled (12-bit) x/y data
+        m.d.comb += Stream.connect(self.mac_cos.o, self.join_xy.x, mapping={"data":"x"}, fn={"data":scale})
+        m.d.comb += Stream.connect(self.mac_sin.o, self.join_xy.y, mapping={"data":"y"}, fn={"data":scale})
+
 
 ----
 
@@ -137,5 +160,6 @@ I've implemented the following :
 * need good simulation sink / source classes to assist with unit tests for new designs. In fact the whole Stream architecture makes unit tests much simpler. You can often simply push data to the input sim stream, collect packets at the output and assert that they are what you expected. SourceSim and SinkSim.
 * SPI example: the last flag can be used to force chip-select de-assert. So the packet translates to SPI data bursts. The Rx side can do the same thing, adding first last flags, so you can transparently send (single payload) packets over a SPI interface.
 * Operations on streams allow DSP functions to be performed - much like [gnuradio](https://www.gnuradio.org/) flowgraphs.
+* Needs the ability to pass functions for each payload to process data, rather than just copying source to sink.
 
 Very much a work in progress.
