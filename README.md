@@ -52,9 +52,9 @@ Looking at the logic analyser output on the DAC's SPI lines, you can see the 0xf
 Passing functions to connect()
 ----
 
-Sometimes you want to perform operaion on data, rather than simply copying it from stream A to B. The Stream.connect() function allows a function to be specified that can supply the opreation. 
+Sometimes you want to perform operations on data, rather than simply copying it from stream A to B. The Stream.connect() function allows a function to be specified that can supply the operation.
 
-For example, a MAC stage has a 28-bit output accumulator. You want to shift this into a 12-bit output by taking the high bits.
+For example, a MAC stage has a 28-bit output accumulator. You want to signed shift this into a 12-bit output by taking the high bits.
 
 
         # MAC has 28-bit output : (width * 2) + (bits_for(samples)-1)
