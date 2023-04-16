@@ -25,11 +25,12 @@ class MAX11125(Elaboratable):
         self.phy = self.spi.phy
         layout_o = [ ("data", 12 ), ("chan", 4), ]
         layout_i = [ ("chan", 4 ), ]
-        self.i = Stream(layout=layout_i, name="MAX11125.i")
-        self.o = Stream(layout=layout_o, name="MAX11125.o")
+        self.i = Stream(layout=layout_i, name="in")
+        self.o = Stream(layout=layout_o, name="out")
 
         self.divider = divider
         self.clock = Signal(range(divider))
+        self.sync = Signal()
 
     def elaborate(self, platform):
         m = Module()
@@ -46,6 +47,10 @@ class MAX11125(Elaboratable):
                 self.clock.eq(0),
                 self.spi.enable.eq(1),
             ]
+        with m.Elif(self.sync & self.spi.is_idle()):
+            # used to sync the divider clock, to prevent jitter
+            # between the incoming data and the local clock.
+            m.d.sync += self.clock.eq(0)
 
         m.d.comb += Stream.connect(self.i, self.spi.i, exclude=["chan"])
         m.d.comb += Stream.connect(self.spi.o, self.o, exclude=["chan", "data"])

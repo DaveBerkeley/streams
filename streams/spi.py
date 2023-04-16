@@ -65,6 +65,9 @@ class SpiController(Elaboratable):
 
         self.state = Signal(State, reset=State.IDLE)
 
+    def is_idle(self):
+        return self.state == State.IDLE
+
     def elaborate(self, platform):
         m = Module()
 
