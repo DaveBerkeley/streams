@@ -122,13 +122,13 @@ class StreamInit(Elaboratable):
 
     def __init__(self, data, layout):
         assert len(data)
-        self.i = Stream(layout, name="StreamInit_i")
-        self.o = Stream(layout, name="StreamInit_o")
+        self.i = Stream(layout, name="in")
+        self.o = Stream(layout, name="out")
         self.clr = Signal()
 
         # internal stream from Array
         self.data = Array( [ self.i.cat_dict(d, flags=True) for d in data ] )
-        self.s = Stream(layout, name="StreamInit_s")
+        self.s = Stream(layout, name="rom")
 
         self.idx = Signal(range(len(data)+1))
         self.done = Signal()

@@ -24,7 +24,7 @@ class State(IntEnum):
 
 class SpiController(Elaboratable):
 
-    def __init__(self, width, init=[], cpol=0, cpha=0, last_cs=False, name="SpiController"):
+    def __init__(self, width, init=[], cpol=0, cpha=0, last_cs=False, name=""):
         self.width = width
         self.last_cs = last_cs
         self.cpol = Signal(reset=cpol)
@@ -48,9 +48,9 @@ class SpiController(Elaboratable):
         self.odata = Signal(width)
 
         layout = [ ("data", width), ]
-        self.i = Stream(layout, name=f"{name}_i")
-        self._i = Stream(layout, name=f"{name}_int")
-        self.o = Stream(layout, name=f"{name}_o")
+        self.i = Stream(layout, name=f"{name}in")
+        self._i = Stream(layout, name=f"{name}int")
+        self.o = Stream(layout, name=f"{name}out")
         if init:
             self.init = StreamInit(init, layout)
             self.starting = Signal(reset=1)
@@ -233,8 +233,8 @@ class SpiReadPacket(Elaboratable):
     """
 
     def __init__(self, layout):
-        self.i = Stream(layout, name="SpiReadPacket_i")
-        self.o = Stream(layout, name="SpiReadPacket_o")
+        self.i = Stream(layout, name="in")
+        self.o = Stream(layout, name="out")
         # connect to SpiPeripheral internal signals
         self.stop = Signal()
         self.sample = Signal()
@@ -282,7 +282,7 @@ class SpiReadPacket(Elaboratable):
 
 class SpiPeripheral(Elaboratable):
 
-    def __init__(self, width, cpol=0, cpha=0, last_cs=False, name="SpiPeripheral"):
+    def __init__(self, width, cpol=0, cpha=0, last_cs=False, name=""):
         self.width = width
         self.cpol = Signal(reset=cpol)
         self.cpha = Signal(reset=cpha)
@@ -308,8 +308,8 @@ class SpiPeripheral(Elaboratable):
         self.sro = Signal(width)
 
         layout = [ ("data", width), ]
-        self.i = Stream(layout=layout, name=f"{name}_i")
-        self.o = Stream(layout=layout, name=f"{name}_o")
+        self.i = Stream(layout=layout, name=f"{name}in")
+        self.o = Stream(layout=layout, name=f"{name}out")
 
         self.odata = Signal(width)
         self.has_tx = Signal()
