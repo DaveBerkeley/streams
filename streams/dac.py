@@ -58,7 +58,7 @@ class AD56x8(Elaboratable):
         # don't connect any of the payloads automatically, just the handshakes
         # as the input stream is ("data",x),("addr",4),("cmd",4), SPI input is ("data",32)
         # we need to Cat the input payloads into a single 32-bit "data" payload.
-        exclude = [ name for name, _ in self.i.layout ]
+        exclude = [ name for name, _ in self.i.get_layout() ]
         # We want every word Tx to assert/deassert SCS, so force first/last=1
         exclude += [ "first", "last" ]
         m.d.comb += Stream.connect(self.i, self.spi.i, exclude=exclude)

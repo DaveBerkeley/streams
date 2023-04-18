@@ -52,7 +52,7 @@ class Cluster:
 
     def print_connections(self, f, this):
         def get_payload(s):
-            names = [ name for name, _ in s.layout ]
+            names = [ name for name, _ in s.get_layout() ]
             return ",".join(names)
         for source, sink, s in Stream.connections:
             if this:

@@ -20,7 +20,7 @@ class Stream:
     connections = []
 
     def __init__(self, layout, name=None):
-        self.layout = layout
+        self._layout = layout
         self.name = name
         self.ready = Signal()
         self.valid = Signal()
@@ -53,7 +53,7 @@ class Stream:
                 o = getattr(source, name)
                 statements += op(name, i, o)
 
-        for name, _ in source.layout:
+        for name, _ in source.get_layout():
             if not name in exclude:
                 oname = mapping.get(name, name)
                 i = getattr(source, name)
@@ -68,22 +68,22 @@ class Stream:
     def connect_sink(self, sink, exclude=[], mapping={}, fn={}):
         return Stream.connect(self, sink, exclude=exclude, mapping=mapping, fn=fn)
 
-    def _get_layout(self, flags=False):
-        layout = self.layout[:]
+    def get_layout(self, flags=False):
+        layout = self._layout[:]
         if flags:
             layout += [ ("first", 1), ("last", 1) ]
         return layout
 
     def cat_payload(self, flags=False):
         data = []
-        for name, _ in self._get_layout(flags):
+        for name, _ in self.get_layout(flags):
             data.append(getattr(self, name))
         return Cat(*data)
 
     def payload_eq(self, data, flags=False):
         statements = []
         idx = 0
-        for name, size in self._get_layout(flags):
+        for name, size in self.get_layout(flags):
             s = getattr(self, name)
             statements += [ s.eq(data[idx:idx+size]) ]
             idx += size
@@ -91,7 +91,7 @@ class Stream:
 
     def cat_dict(self, d, flags=False):
         data = []
-        for name, size in self._get_layout(flags):
+        for name, size in self.get_layout(flags):
             v = d.get(name, 0)
             data.append(Const(v, shape=size))
         return Cat(*data)
@@ -354,7 +354,7 @@ class Split(Elaboratable):
         m = Module()
 
         # Tx outputs
-        for name, _ in self.i.layout:
+        for name, _ in self.i.get_layout():
             s = getattr(self, name)
             with m.If(s.valid & s.ready):
                 m.d.sync += s.valid.eq(0)
@@ -362,7 +362,7 @@ class Split(Elaboratable):
         # If all outputs are ready, accept input
         with m.If(~self.i.ready):
             m.d.sync += self.i.ready.eq(1)
-            for name, _ in self.i.layout:
+            for name, _ in self.i.get_layout():
                 s = getattr(self, name)
                 with m.If(s.valid):
                     m.d.sync += self.i.ready.eq(0)
@@ -371,7 +371,7 @@ class Split(Elaboratable):
         with m.If(self.i.valid & self.i.ready):
             m.d.sync += self.i.ready.eq(0)
             # copy each payload to its output
-            for name, _ in self.i.layout:
+            for name, _ in self.i.get_layout():
                 s = getattr(self, name)
                 f = getattr(s, name)
                 v = getattr(self.i, name)
