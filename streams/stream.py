@@ -382,4 +382,52 @@ class Split(Elaboratable):
 
         return m
 
+#
+#   Allow a Packet through only when en is hi.
+#   Once the packet has started, allow it to complete.
+
+class Gate(Elaboratable):
+
+    def __init__(self, layout=None):
+        self.i = Stream(layout=layout, name="in")
+        self.o = Stream(layout=layout, name="out")
+        self.en = Signal()
+
+        self.allow = Signal()
+        self.iready = Signal()
+
+    def elaborate(self, platform):
+        m = Module()
+
+        start = self.en & self.o.ready & self.i.first & self.i.valid & (~self.allow)
+
+        m.d.comb += self.i.ready.eq(self.iready & self.allow)
+
+        with m.If(self.o.valid & self.o.ready):
+            # Tx output
+            m.d.sync += self.o.valid.eq(0)
+            with m.If(self.allow):
+                with m.If(self.o.last):
+                    m.d.sync += self.allow.eq(0)
+                    m.d.sync += self.iready.eq(0)
+
+        with m.If(self.i.valid & self.iready):
+            # Rx input
+            m.d.sync += self.iready.eq(0)
+            with m.If(start | self.allow):
+                m.d.sync += Stream.connect(self.i, self.o, exclude=["ready"])
+
+        m.d.sync += self.iready.eq(0)
+
+        with m.If(start):
+            m.d.sync += self.allow.eq(1)
+            m.d.sync += self.iready.eq(1)
+
+        with m.If(self.allow):
+            m.d.sync += Stream.connect(self.i, self.o, exclude=["ready"])
+            with m.If(self.o.ready & ~self.iready):
+                m.d.sync += self.iready.eq(1)
+
+        return m
+
 #   FIN

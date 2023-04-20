@@ -3,7 +3,7 @@
 from amaranth import *
 from amaranth.sim import *
 
-from streams.stream import to_packet, StreamInit, StreamNull, Tee, Join, Split
+from streams.stream import to_packet, StreamInit, StreamNull, Tee, Join, Split, Gate
 from streams.sim import SourceSim, SinkSim
 
 #
@@ -282,27 +282,110 @@ def sim_split(m, verbose):
 #
 #
 
+def sim_gate(m, verbose):
+    print("test gate")
+    sim = Simulator(m)
+
+    src = SourceSim(m.i, verbose=verbose)
+    sink = SinkSim(m.o)
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            yield from src.poll()
+            yield from sink.poll()
+
+    def proc():
+
+        data = [
+            [ 10, [ 1, 2, 3, ], ],
+            [ 10, [ 4, 5, 6, ], ],
+            [ 50, [ 7, 8, 9, ], ],
+            [ 70, [ 10, ], ],
+            [ 90, [ 7, 8, 90, ], ],
+            [ 130, [ 11, 12, 13, ], ],
+            [ 150, [ 10, ], ],
+        ]
+
+        for i, (t, d) in enumerate(data):
+            p = to_packet(d)
+            for x in p:
+                src.push(t, **x)
+
+        # generate a set of long & short enables
+        enables = [ 20, 40, 60, 80, 100, 120, 140, 160 ]
+        long = [ 40, 60 ]
+        hi = 0
+
+        while True:
+            t = sink.t
+            if t > max(enables):
+                break
+            if t in enables:
+                yield m.en.eq(1)
+                if t in long:
+                    hi = 18
+                else:
+                    hi = 1
+            yield from tick()
+            if hi:
+                hi -= 1
+            if hi == 0:
+                yield m.en.eq(0)
+
+        yield from tick(20)
+
+        def check(idx, t, d):
+            #print(idx, t, d, data[idx], enables)
+            margin = 3 # takes 3 clocks to travel src->sink
+            if idx in [ 0, 1, 4 ]:
+                assert t == (enables[idx] + margin)
+                assert d == data[idx][1]
+            elif idx in [ 2, 3 ]:
+                assert t == (data[idx][0] + margin)
+                assert d == data[idx][1]
+            elif idx in [ 5, 6 ]:
+                assert t == (enables[idx+1] + margin)
+                assert d == data[idx][1]
+            else:
+                assert 0, ("bad idx", idx)
+
+        for i, p in enumerate(sink.get_data()):
+            t, d = p[0]["_t"], [ x["data"] for x in p ]
+            check(i, t, d)
+
+    sim.add_clock(1 / 100e6)
+    sim.add_sync_process(proc)
+    with sim.write_vcd(f"gtk/stream_gate.vcd", traces=[]):
+        sim.run()
+
+#
+#
+
 def test(verbose=False):
     from streams.sim import SinkSim, SourceSim
 
-    if 1:
-        layout = [ ( "data", 16 ), ]
-        data = to_packet([ 0xabcd, 0xffff, 0xaaaa, 0x0000, 0x5555 ])
-        dut = StreamInit(data, layout)
-        sim_init(dut, data, verbose)
+    layout = [ ( "data", 16 ), ]
+    data = to_packet([ 0xabcd, 0xffff, 0xaaaa, 0x0000, 0x5555 ])
+    dut = StreamInit(data, layout)
+    sim_init(dut, data, verbose)
 
-        dut = StreamNull(3, layout)
-        sim_null(dut, 3, verbose)
+    dut = StreamNull(3, layout)
+    sim_null(dut, 3, verbose)
 
-        dut = Tee(3, layout, wait_all=False)
-        sim_tee(dut, verbose)
-        dut = Tee(3, layout, wait_all=True)
-        sim_tee(dut, verbose)
+    dut = Tee(3, layout, wait_all=False)
+    sim_tee(dut, verbose)
+    dut = Tee(3, layout, wait_all=True)
+    sim_tee(dut, verbose)
 
-        dut = Join(first_field="a", a=[("a", 8)], b=[("b", 8)])
-        sim_join(dut, verbose)
+    dut = Join(first_field="a", a=[("a", 8)], b=[("b", 8)])
+    sim_join(dut, verbose)
 
     dut = Split(layout=[("a", 12), ("b", 8), ("c", 8)])
     sim_split(dut, verbose)
+
+    dut = Gate(layout=[("data", 16)])
+    sim_gate(dut, verbose)
 
 #   FIN

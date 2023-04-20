@@ -7,11 +7,13 @@ class MonitorSim:
         self.name = name
         self._data = [ [] ]
         self._layout = stream.get_layout(flags=True)
+        self.t = 0
 
     def reset(self):
         self._data = [ [] ]
 
     def poll(self):
+        self.t += 1
         r = yield self.m.ready
         v = yield self.m.valid
         f = yield self.m.first
@@ -19,7 +21,7 @@ class MonitorSim:
             if f:
                 if len(self._data[0]):
                     self._data += [ [ ] ]
-            record = {}
+            record = { "_t" : self.t, }
             for name, _ in self._layout: 
                 s = getattr(self.m, name)
                 d = yield s
