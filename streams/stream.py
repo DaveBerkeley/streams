@@ -30,7 +30,7 @@ class Stream:
             setattr(self, name, Signal(width, name=name))
 
     @staticmethod
-    def connect(source, sink, exclude=[], mapping={}, fn={}):
+    def connect(source, sink, exclude=[], mapping={}, fn={}, silent=False):
         # use with eg.
         # m.d.comb += src.connect(sink, exclude=["first","last"], mapping={"x":"data"}, fn={"x":shift_x})
         statements = []
@@ -61,12 +61,13 @@ class Stream:
                 statements += op(name, i, o)
 
         # Used by the dot graph generation to track connections
-        Stream.connections += [ (source, sink, statements), ]
+        if not silent:
+            Stream.connections += [ (source, sink, statements), ]
 
         return statements
 
-    def connect_sink(self, sink, exclude=[], mapping={}, fn={}):
-        return Stream.connect(self, sink, exclude=exclude, mapping=mapping, fn=fn)
+    def connect_sink(self, sink, exclude=[], mapping={}, fn={}, silent=False):
+        return Stream.connect(self, sink, exclude=exclude, mapping=mapping, fn=fn, silent=silent)
 
     def get_layout(self, flags=False):
         layout = self._layout[:]
@@ -415,7 +416,7 @@ class Gate(Elaboratable):
             # Rx input
             m.d.sync += self.iready.eq(0)
             with m.If(start | self.allow):
-                m.d.sync += Stream.connect(self.i, self.o, exclude=["ready"])
+                m.d.sync += Stream.connect(self.i, self.o, exclude=["ready"], silent=True)
 
         m.d.sync += self.iready.eq(0)
 
@@ -424,7 +425,7 @@ class Gate(Elaboratable):
             m.d.sync += self.iready.eq(1)
 
         with m.If(self.allow):
-            m.d.sync += Stream.connect(self.i, self.o, exclude=["ready"])
+            m.d.sync += Stream.connect(self.i, self.o, exclude=["ready"], silent=True)
             with m.If(self.o.ready & ~self.iready):
                 m.d.sync += self.iready.eq(1)
 
