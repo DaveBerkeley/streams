@@ -3,7 +3,7 @@
 from amaranth import *
 from amaranth.sim import *
 
-from streams.stream import to_packet, StreamInit, StreamNull, Tee, Join, Split, Gate
+from streams.stream import to_packet, StreamInit, StreamNull, Tee, Join, Split, Gate, Arbiter
 from streams.sim import SourceSim, SinkSim
 
 #
@@ -363,6 +363,89 @@ def sim_gate(m, verbose):
 #
 #
 
+def sim_arbiter(m, verbose):
+    print("test arbiter")
+    sim = Simulator(m)
+
+    src_a = SourceSim(m.i[0], verbose=verbose, name="a")
+    src_b = SourceSim(m.i[1], verbose=verbose, name="b")
+    src_c = SourceSim(m.i[2], verbose=verbose, name="c")
+    sink = SinkSim(m.o)
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            yield from src_a.poll()
+            yield from src_b.poll()
+            yield from src_c.poll()
+            yield from sink.poll()
+
+    def proc():
+
+        data = [
+            [ 10, src_a, [ 1, 6, 3, ], ],
+            [ 20, src_b, [ 2, 5, 6, ], ],
+            [ 35, src_a, [ 1, 8, 9, ], ],
+            [ 35, src_b, [ 2, 8, 9, ], ],
+            [ 60, src_a, [ 1, ], ],
+            [ 61, src_b, [ 2, ], ],
+            [ 70, src_a, [ 1, ], ],
+            [ 70, src_b, [ 2, ], ],
+            [ 70, src_c, [ 3, ], ],
+            [ 80, src_c, [ 3, 8, 9, ], ],
+            [ 80, src_b, [ 2, 8, 9, ], ],
+            [ 81, src_a, [ 1, 6, 10, ], ],
+            [ 82, src_b, [ 2, 11, 12, ], ],
+        ]
+
+        for i, (t, s, d) in enumerate(data):
+            p = to_packet(d)
+            for x in p:
+                s.push(t, **x)
+
+        while len(sink.get_data()) < len(data):
+            yield from tick()
+
+        yield from tick(5)
+
+        d = sink.get_data("data")
+
+        # packets from each source should be in order in the output
+        a = []
+        b = []
+        c = []
+        for _, s, p in data:
+            if s == src_a:
+                a.append(p)
+            elif s == src_b:
+                b.append(p)
+            elif s == src_c:
+                c.append(p)
+            else:
+                assert 0, ("bad packet", p)
+
+        for s in [ a, b, c ]:
+            for p in s:
+                found = False
+                for i, pp in enumerate(d):
+                    if p[0] == pp[0]:
+                        # this source, so remove the packet
+                        found = True
+                        del d[i]
+                        break
+                assert found, (s, p)
+
+        assert len(d) == 0
+
+    sim.add_clock(1 / 100e6)
+    sim.add_sync_process(proc)
+    with sim.write_vcd(f"gtk/stream_arb.vcd", traces=[]):
+        sim.run()
+
+#
+#
+
 def test(verbose=False):
     from streams.sim import SinkSim, SourceSim
 
@@ -387,5 +470,8 @@ def test(verbose=False):
 
     dut = Gate(layout=[("data", 16)])
     sim_gate(dut, verbose)
+
+    dut = Arbiter(layout=[("data", 16)], n=3)
+    sim_arbiter(dut, verbose)
 
 #   FIN
