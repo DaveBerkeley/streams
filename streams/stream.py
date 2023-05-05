@@ -14,6 +14,11 @@ def to_packet(data, field='data'):
         p.append(d)
     return p
 
+def add_name(name, label):
+    if not name:
+        return label
+    return name + "_" + label
+
 #
 #
 
@@ -24,12 +29,12 @@ class Stream:
     def __init__(self, layout, name=None):
         self._layout = layout
         self.name = name
-        self.ready = Signal()
-        self.valid = Signal()
-        self.first = Signal()
-        self.last = Signal()
-        for name, width in layout:
-            setattr(self, name, Signal(width, name=name))
+        self.ready = Signal(name=add_name(name, "ready"))
+        self.valid = Signal(name=add_name(name, "valid"))
+        self.first = Signal(name=add_name(name, "first"))
+        self.last = Signal(name=add_name(name, "last"))
+        for payload, width in layout:
+            setattr(self, payload, Signal(width, name=add_name(name, payload)))
 
     @staticmethod
     def connect(source, sink, exclude=[], mapping={}, fn={}, silent=False):
@@ -104,8 +109,8 @@ class Stream:
 
 class Sink(Elaboratable):
 
-    def __init__(self, layout):
-        self.i = Stream(layout, name="Sink")
+    def __init__(self, layout, name=None):
+        self.i = Stream(layout, name=add_name(name, "sink"))
 
     def elaborate(self, platform):
         m = Module()
@@ -123,15 +128,15 @@ class Sink(Elaboratable):
 
 class StreamInit(Elaboratable):
 
-    def __init__(self, data, layout):
+    def __init__(self, data, layout, name=None):
         assert len(data)
-        self.i = Stream(layout, name="in")
-        self.o = Stream(layout, name="out")
+        self.i = Stream(layout, name=add_name(name, "in"))
+        self.o = Stream(layout, name=add_name(name, "out"))
         self.clr = Signal()
 
         # internal stream from Array
         self.data = Array( [ self.i.cat_dict(d, flags=True) for d in data ] )
-        self.s = Stream(layout, name="rom")
+        self.s = Stream(layout, name=add_name(name, "rom"))
 
         self.idx = Signal(range(len(data)+1))
         self.done = Signal()
@@ -225,12 +230,12 @@ class StreamNull(Elaboratable):
 
 class Tee(Elaboratable):
 
-    def __init__(self, n, layout, wait_all=False):
+    def __init__(self, n, layout, wait_all=False, name=None):
         self.wait_all = wait_all
-        self.i = Stream(layout, name="in")
+        self.i = Stream(layout, name=add_name(name, "in"))
         self.o = []
         for i in range(n):
-            s = Stream(layout, name=f"out[{i}]")
+            s = Stream(layout, name=add_name(name, f"out[{i}]"))
             self.o += [ s ]
             setattr(self, f"_o{i}", s) # so that dot graph can find it!
 
@@ -290,27 +295,27 @@ class Join(Elaboratable):
                 return True
         return False
 
-    def __init__(self, first_field=None, **kwargs):
+    def __init__(self, first_field=None, name=None, **kwargs):
         self.first_field = first_field
         # eg Join(a=[("x", 12)], b=[("y", 12)])
         self.i = []
         layouts = []
         self.fields = []
-        for i, (name, layout) in enumerate(kwargs.items()):
+        for i, (payload, layout) in enumerate(kwargs.items()):
             # check we aren't overwriting anything
-            assert not hasattr(self, name)
+            assert not hasattr(self, payload)
             # check it is a valid layout
             assert self.is_layout(layout)
             # check for duplicate fields
             assert not self.has_field(layouts, layout)
-            s = Stream(layout=layout, name=f"i[{i}]")
-            setattr(self, name, s)
-            #print("join", s, name, layout)
+            s = Stream(layout=layout, name=add_name(name, f"i[{i}]"))
+            setattr(self, payload, s)
+            #print("join", s, payload, layout)
             self.i.append(s)
             layouts += layout
-            self.fields.append(name)
+            self.fields.append(payload)
 
-        self.o = Stream(layout=layouts, name="out")
+        self.o = Stream(layout=layouts, name=add_name(name, "out"))
 
     def elaborate(self, platform):
         m = Module()
@@ -346,12 +351,12 @@ class Join(Elaboratable):
 
 class Split(Elaboratable):
 
-    def __init__(self, layout):
-        self.i = Stream(layout=layout, name="in")
+    def __init__(self, layout, name=None):
+        self.i = Stream(layout=layout, name=add_name(name, "in"))
 
-        for name, width in layout:
-            s = Stream(layout=[ (name, width), ], name=name)
-            setattr(self, name, s)
+        for payload, width in layout:
+            s = Stream(layout=[ (payload, width), ], name=add_name(name, payload))
+            setattr(self, payload, s)
 
     def elaborate(self, platform):
         m = Module()
@@ -391,9 +396,9 @@ class Split(Elaboratable):
 
 class Gate(Elaboratable):
 
-    def __init__(self, layout=None):
-        self.i = Stream(layout=layout, name="in")
-        self.o = Stream(layout=layout, name="out")
+    def __init__(self, layout=None, name=None):
+        self.i = Stream(layout=layout, name=add_name(name, "in"))
+        self.o = Stream(layout=layout, name=add_name(name, "out"))
         self.en = Signal()
 
         self.allow = Signal()
@@ -442,14 +447,14 @@ class ArbState(IntEnum):
 
 class Arbiter(Elaboratable):
 
-    def __init__(self, layout, n=None):
+    def __init__(self, layout, n=None, name=None):
         self.i = []
         for i in range(n):
-            s = Stream(layout=layout, name=f"i[{i}]")
+            s = Stream(layout=layout, name=add_name(name, f"i[{i}]"))
             self.i.append(s)
             setattr(self, f"_i{i}", s)
 
-        self.o = Stream(layout=layout, name="out")
+        self.o = Stream(layout=layout, name=add_name(name, "out"))
 
         self.idx = Signal(range(len(self.i)))
         self.state = Signal(ArbState)

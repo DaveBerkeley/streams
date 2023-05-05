@@ -2,7 +2,7 @@
 
 from amaranth import *
 
-from streams.stream import Stream
+from streams.stream import Stream, add_name
 
 __all__ = [ "BinaryOp", "Mul", "MulSigned", "Add", "AddSigned", "Sum", "SumSigned" ]
 
@@ -11,9 +11,9 @@ __all__ = [ "BinaryOp", "Mul", "MulSigned", "Add", "AddSigned", "Sum", "SumSigne
 
 class BinaryOp(Elaboratable):
 
-    def __init__(self, iwidth, owidth):
-        self.i = Stream(layout=[ ("a", iwidth), ("b", iwidth), ], name="in")
-        self.o = Stream(layout=[ ("data", owidth), ], name="out")
+    def __init__(self, iwidth, owidth, name=None):
+        self.i = Stream(layout=[ ("a", iwidth), ("b", iwidth), ], name=add_name(name, "in"))
+        self.o = Stream(layout=[ ("data", owidth), ], name=add_name(name, "out"))
 
     def elaborate(self, platform):
         m = Module()
