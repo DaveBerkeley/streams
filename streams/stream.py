@@ -105,6 +105,33 @@ class Stream:
         return Cat(*data)
 
 #
+#
+
+class Copy(Elaboratable):
+
+    def __init__(self, layout, name=None):
+        self.i = Stream(layout, name=add_name(name, "in"))
+        self.o = Stream(layout, name=add_name(name, "out"))
+
+    def elaborate(self, platform):
+        m = Module()
+
+        with m.If(self.o.valid & self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
+
+        with m.If(self.i.valid & self.i.ready):
+            m.d.sync += [
+                self.i.ready.eq(0),
+                self.o.valid.eq(1),
+            ]
+            m.d.sync += self.o.payload_eq(self.i.cat_payload(flags=True), flags=True)
+
+        with m.If((~self.i.ready) & ~self.o.valid):
+            m.d.sync += self.i.ready.eq(1)
+
+        return m
+
+#
 #   Stream that simply drops all input
 
 class Sink(Elaboratable):
