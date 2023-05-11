@@ -71,9 +71,9 @@ class AddSigned(Add):
 
 class Sum(Elaboratable):
 
-    def __init__(self, iwidth, owidth):
-        self.i = Stream(layout=[("data", iwidth),], name="in")
-        self.o = Stream(layout=[("data", owidth),], name="out")
+    def __init__(self, iwidth, owidth, name=None):
+        self.i = Stream(layout=[("data", iwidth),], name=add_name(name, "in"))
+        self.o = Stream(layout=[("data", owidth),], name=add_name(name, "out"))
         self.zero = Const(0, owidth)
 
     def elaborate(self, platform):
