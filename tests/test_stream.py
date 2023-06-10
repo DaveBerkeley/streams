@@ -3,7 +3,7 @@
 from amaranth import *
 from amaranth.sim import *
 
-from streams.stream import to_packet, StreamInit, StreamNull, Tee, Join, Split, Gate, Arbiter
+from streams.stream import to_packet, StreamInit, StreamNull, Tee, Join, Split, GatePacket, Arbiter
 from streams.sim import SourceSim, SinkSim
 
 #
@@ -468,7 +468,7 @@ def test(verbose=False):
     dut = Split(layout=[("a", 12), ("b", 8), ("c", 8)])
     sim_split(dut, verbose)
 
-    dut = Gate(layout=[("data", 16)])
+    dut = GatePacket(layout=[("data", 16)])
     sim_gate(dut, verbose)
 
     dut = Arbiter(layout=[("data", 16)], n=3)

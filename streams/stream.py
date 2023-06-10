@@ -42,10 +42,13 @@ class Stream:
         # m.d.comb += src.connect(sink, exclude=["first","last"], mapping={"x":"data"}, fn={"x":shift_x})
         statements = []
 
+        used = {}
+
         def op(name, i, o):
             f = fn.get(name)
             if f is None:
                 return [ o.eq(i) ]
+            used[name] = True
             return [ f(name, i, o) ]
 
         for name in [ "valid", "first", "last" ]:
@@ -70,6 +73,9 @@ class Stream:
         # Used by the dot graph generation to track connections
         if not silent:
             Stream.connections += [ (source, sink, statements), ]
+
+        for key in fn.keys():
+            assert used.get(key), f"function for '{key}' not used"
 
         return statements
 
@@ -418,10 +424,36 @@ class Split(Elaboratable):
         return m
 
 #
+#   Only enable i.ready when 'en'able is set.
+
+class Gate(Elaboratable):
+
+    def __init__(self, layout=None, name=None):
+        self.i = Stream(layout=layout, name=add_name(name, "in"))
+        self.o = Stream(layout=layout, name=add_name(name, "out"))
+        self.en = Signal(name=add_name(name, "en"))
+
+    def elaborate(self, platform):
+        m = Module()
+
+        with m.If(self.o.valid & self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
+
+        with m.If(self.i.valid & self.i.ready):
+            m.d.sync += self.i.ready.eq(0)
+            m.d.sync += self.o.valid.eq(1)
+            m.d.sync += self.o.payload_eq(self.i.cat_payload())
+
+        with m.If(self.en & ~self.i.ready):
+            m.d.sync += self.i.ready.eq(1)
+
+        return m
+
+#
 #   Allow a Packet through only when en is hi.
 #   Once the packet has started, allow it to complete.
 
-class Gate(Elaboratable):
+class GatePacket(Elaboratable):
 
     def __init__(self, layout=None, name=None):
         self.i = Stream(layout=layout, name=add_name(name, "in"))

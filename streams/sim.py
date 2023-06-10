@@ -76,6 +76,9 @@ class SourceSim:
         self.idx = 0
         yield self.m.valid.eq(0)
 
+    def done(self):
+        return self.idx >= len(self._data)
+
     def poll(self):
 
         v = yield self.m.valid
