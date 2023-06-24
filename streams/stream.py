@@ -26,6 +26,10 @@ class Stream:
 
     connections = []
 
+    @staticmethod
+    def add_dot(source, sink, statements, exclude=None, fn=None):
+        Stream.connections += [ (source, sink, statements, exclude, fn), ]
+
     def __init__(self, layout, name=None):
         self._layout = layout
         self.name = name
@@ -72,7 +76,7 @@ class Stream:
 
         # Used by the dot graph generation to track connections
         if not silent:
-            Stream.connections += [ (source, sink, statements), ]
+            Stream.add_dot(source, sink, statements, exclude=exclude, fn=fn)
 
         for key in fn.keys():
             assert used.get(key), f"function for '{key}' not used"
@@ -341,7 +345,7 @@ class Join(Elaboratable):
             assert self.is_layout(layout)
             # check for duplicate fields
             assert not self.has_field(layouts, layout)
-            s = Stream(layout=layout, name=add_name(name, f"i[{i}]"))
+            s = Stream(layout=layout, name=add_name(name, payload))
             setattr(self, payload, s)
             #print("join", s, payload, layout)
             self.i.append(s)

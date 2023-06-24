@@ -51,15 +51,25 @@ class Cluster:
         print(pad, "}", file=f)
 
     def print_connections(self, f, this):
-        def get_payload(s):
-            names = [ name for name, _ in s.get_layout() ]
-            return ",".join(names)
-        for source, sink, s in Stream.connections:
+        def get_payload(s, exclude):
+            if hasattr(s, "get_layout"):
+                names = []
+                for name, _ in s.get_layout():
+                    if name in exclude:
+                        continue
+                    if fn and (name in fn):
+                        name = f"{fn[name].__name__}({name})"
+                    names.append(name)
+                if not names:
+                    return "[]"
+                return ",".join(names)
+            return "xxx"
+        for source, sink, s, exclude, fn in Stream.connections:
             if this:
                 if (source not in self.streams) or (sink not in self.streams):
                     continue
-            p_in = get_payload(source)
-            p_out = get_payload(sink)
+            p_in = get_payload(source, exclude)
+            p_out = get_payload(sink, exclude)
             if p_in == p_out:
                 if p_in == "data":
                     payload = ""
@@ -68,7 +78,11 @@ class Cluster:
             else:
                 payload = p_in + " -> " + p_out
             ni, no = id(source), id(sink)
-            print(f' {ni} -> {no} [label="{payload}"]', file=f)
+            if s:
+                style = "[arrowhead=empty,penwidth=1]"
+            else:
+                style = ""
+            print(f' {ni} -> {no} [label="{payload}"]{style}', file=f)
 
     def print_dot(self, f):
         print("digraph D {", file=f)
