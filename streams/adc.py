@@ -25,8 +25,8 @@ class MAX11125(Elaboratable):
         self.phy = self.spi.phy
         layout_o = [ ("data", 12 ), ("chan", 4), ]
         layout_i = [ ("chan", 4 ), ]
-        self.i = Stream(layout=layout_i, name="in")
-        self.o = Stream(layout=layout_o, name="out")
+        self.i = Stream(layout=layout_i, name="tx")
+        self.o = Stream(layout=layout_o, name="rx")
 
         self.divider = divider
         self.clock = Signal(range(divider))

@@ -352,7 +352,7 @@ class Join(Elaboratable):
             layouts += layout
             self.fields.append(payload)
 
-        self.o = Stream(layout=layouts, name=add_name(name, "out"))
+        self.o = Stream(layout=layouts, name=add_name(name, ','.join(self.fields)))
 
     def elaborate(self, platform):
         m = Module()
