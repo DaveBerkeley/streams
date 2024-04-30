@@ -8,7 +8,7 @@ from amaranth import *
 from amaranth.sim import *
 
 from streams.sim import SinkSim, SourceSim
-from streams.i2s import I2SOutput, I2SInput
+from streams.i2s import I2SOutput, I2SInput, I2STxClock
 
 #
 #
@@ -37,12 +37,12 @@ def sim_o(m, verbose):
     def proc():
 
         data = [
-            [ 0xaaaa, 0x5555, ],
-            [ 0x1111, 0x2222, ],
-            [ 0x0000, 0xffff, ],
-            [ 0xffff, 0x0000, ],
-            [ 0x1234, 0x1234, ],
-            [ 0x8000, 0x7fff, ],
+            [ 0xaaaaaaaa, 0x55555555, ],
+            [ 0x11111111, 0x22222222, ],
+            [ 0x00000000, 0xffffffff, ],
+            [ 0xffffffff, 0x00000000, ],
+            [ 0x12345678, 0x12345678, ],
+            [ 0x80000000, 0x7fffffff, ],
         ]
 
         for left, right in data:
@@ -132,12 +132,44 @@ def sim_i(m, verbose):
 #
 #
 
+def sim_ck(m, verbose):
+    print("test i2s clock")
+
+    sim = Simulator(m)
+
+    info = { "t" : 0 }
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+
+            info['t'] += 1
+            if ((info['t'] % 10) == 0):
+                yield m.enable.eq(1)
+            else:
+                yield m.enable.eq(0)
+
+    def proc():
+        yield from tick(5000)
+
+    sim.add_clock(1 / 100e6)
+    sim.add_sync_process(proc)
+    with sim.write_vcd("gtk/i2s_ck.vcd", traces=m.ports()):
+        sim.run()
+
+#
+#
+
 def test(verbose):
-    dut = I2SOutput(16)
+    dut = I2SOutput(32)
     sim_o(dut, verbose)
 
     dut = I2SInput(16)
     sim_i(dut, verbose)
+
+    dut = I2STxClock(24)
+    sim_ck(dut, verbose)
 
     print("done")
 
