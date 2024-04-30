@@ -100,6 +100,8 @@ def get_clusters(m, nest=1, d=None):
     names[id(m)] = True
 
     for name in dir(m):
+        if name == "next":
+            continue
         a = getattr(m, name)
         if id(a) in names:
             continue
