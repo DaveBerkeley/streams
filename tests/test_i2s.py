@@ -1,4 +1,9 @@
 
+import sys
+
+if not "." in sys.path:
+    sys.path.append(".")
+
 from amaranth import *
 from amaranth.sim import *
 
@@ -135,5 +140,8 @@ def test(verbose):
     sim_i(dut, verbose)
 
     print("done")
+
+if __name__ == "__main__":
+    test(True)
 
 #   FIN
