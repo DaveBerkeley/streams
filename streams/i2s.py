@@ -193,6 +193,12 @@ class I2SInput(Elaboratable):
                 self.rx.ws.eq(self.phy.ws),
                 self.rx.sck.eq(self.phy.sck),
             ]
+        else:
+            # connect the phy to the rx_clock signals
+            m.d.comb += [
+                self.phy.ws.eq(self.rx.ws),
+                self.phy.sck.eq(self.rx.sck),
+            ]
 
         with m.If(self.o.ready & self.o.valid):
             m.d.sync += self.o.valid.eq(0)
