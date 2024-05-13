@@ -65,7 +65,7 @@ class StreamToRam(Elaboratable):
             self.subs.append(self.mem)
 
         layout = [ ( "data", width ), ]
-        self.i = Stream(layout)
+        self.i = Stream(layout, name="i")
         self.offset = Signal(range(depth))
         self.incr = Signal() # add to addr on each read (0 or 1)
 
@@ -121,7 +121,7 @@ class RamToStream(Elaboratable):
         self.incr = Signal(range(depth), reset=1)
 
         layout = [ ( "data", width ), ]
-        self.o = Stream(layout)
+        self.o = Stream(layout, name="o")
 
         self.idx = Signal(range(depth))
         self.count = Signal(range(depth))

@@ -79,7 +79,7 @@ class I2SOutput(Elaboratable):
         self.width = width
         self.tx = tx_clock
         layout = [ ("left", width), ("right", width) ]
-        self.i = Stream(layout=layout, name="i")
+        self.i = Stream(layout=layout, name=f"i{width}")
         self.enable = Signal()
 
         self.phy = Phy()
@@ -179,7 +179,7 @@ class I2SInput(Elaboratable):
         self.sri = Signal(width * 2)
 
         layout = [ ("left", width), ("right", width) ]
-        self.o = Stream(layout=layout, name="o")
+        self.o = Stream(layout=layout, name=f"o{width}")
 
     def elaborate(self, platform):
         m = Module()
