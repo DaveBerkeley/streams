@@ -172,4 +172,70 @@ class RamToStream(Elaboratable):
 
         return m
 
+#
+#   Takes addr input stream, produces data output stream.
+#   Connected to a Memory.
+
+class RamReader(Elaboratable):
+
+    def __init__(self, width=16, depth=1024, mem=None):
+        self.subs = []
+
+        if mem:
+            self.mem = mem
+        else:
+            self.mem = DualPortMemory(width=width, depth=depth)
+            self.subs.append(self.mem)
+
+        addr_width = Const(0, range(depth)).shape().width
+        self.i = Stream(layout=[("addr", addr_width)], name="i")
+        self.o = Stream(layout=[("data", width)], name="o")
+
+        self.port = self.mem.rd
+
+        self.addr = Signal(addr_width)
+        self.first = Signal()
+        self.last = Signal()
+        self.reading = Signal()
+        self.writing = Signal()
+
+    def elaborate(self, platform):
+        m = Module()
+        m.submodules += self.subs
+
+        m.d.comb += self.port.addr.eq(self.addr)
+
+        with m.If((self.o.valid & self.o.ready) | ~self.o.valid):
+            with m.If(~self.i.ready):
+                m.d.sync += self.i.ready.eq(1)
+
+        with m.If(self.i.valid & self.i.ready):
+            m.d.sync += [
+                self.i.ready.eq(0),
+                self.addr.eq(self.i.addr),
+                self.first.eq(self.i.first),
+                self.last.eq(self.i.last),
+                self.reading.eq(1),
+            ]
+
+        with m.If(self.reading):
+            m.d.sync += [
+                self.reading.eq(0),
+                self.writing.eq(1),
+            ]
+
+        with m.If(self.writing & ~self.o.valid):
+            m.d.sync += [
+                self.o.data.eq(self.port.data),
+                self.o.first.eq(self.first),
+                self.o.last.eq(self.last),
+                self.o.valid.eq(1),
+                self.writing.eq(0),
+            ]
+
+        with m.If(self.o.valid & self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
+
+        return m
+
 #   FIN

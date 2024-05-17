@@ -1,21 +1,27 @@
+#!/bin/env python3
 
 from amaranth import *
 from amaranth.sim import *
 
+import sys
+spath = "../streams"
+if not spath in sys.path:
+    sys.path.append(spath)
+
 from streams.stream import Stream 
 from streams.sim import SourceSim, SinkSim
-from streams.ram import StreamToRam, RamToStream
+from streams.ram import StreamToRam, RamToStream, RamReader
 
 #
 #
 
-def sim_s2ram():
+def sim_s2ram(verbose):
     print("test Stream 2 RAM")
 
     m = StreamToRam(width=16, depth=1024)
     sim = Simulator(m)
 
-    src = SourceSim(m.i)
+    src = SourceSim(m.i, verbose=verbose)
 
     def tick(n=1):
         assert n
@@ -72,7 +78,7 @@ def sim_s2ram():
 #
 #
 
-def sim_ram2s():
+def sim_ram2s(verbose):
     print("test RAM 2 Stream")
 
     m = RamToStream(width=16, depth=1024)
@@ -153,8 +159,67 @@ def sim_ram2s():
 #
 #
 
+def sim_ramreader(verbose):
+    print("test ram reader")
+
+    depth = 1024
+    m = RamReader(width=16, depth=depth)
+    sim = Simulator(m)
+
+    src = SourceSim(m.i, verbose=verbose)
+    sink = SinkSim(m.o)
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            yield from src.poll()
+            yield from sink.poll()
+
+    def proc():
+
+        packets = [
+            [ 111, 1, 2, 3, 4, 5, 6, ],
+            [ 3, 4, 5, 6, 7, ],
+            [ 123, ],
+        ]
+
+        # load ram with data=addr
+        for i in range(depth):
+            yield m.mem[i].eq(i)
+
+        for packet in packets:
+            for i, data in enumerate(packet):
+                src.push(5, addr=data, first=i==0, last=i==(len(packet)-1))
+
+        while True:
+            yield from tick(1)
+            if src.done():
+                break
+
+        yield from tick(5)
+
+        p = sink.get_data("data")
+        for i, packet in enumerate(packets):
+            assert p[i] == packet, (i, p, packet)
+
+    sim.add_clock(1 / 50e6)
+    sim.add_sync_process(proc)
+    with sim.write_vcd("gtk/ramread.vcd", traces=[]):
+        sim.run()
+
+#
+#
+
 def test(verbose):
-    sim_s2ram()
-    sim_ram2s()
+    sim_s2ram(verbose)
+    sim_ram2s(verbose)
+    sim_ramreader(verbose)
+
+#
+#
+
+if __name__ == "__main__":
+    test(True)
 
 #   FIN
