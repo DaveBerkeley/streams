@@ -4,7 +4,9 @@ from amaranth import *
 
 from streams.stream import Stream, add_name
 
-__all__ = [ "BinaryOp", "Mul", "MulSigned", "Add", "AddSigned", "Sum", "SumSigned" ]
+__all__ = [ "BinaryOp", "Mul", "MulSigned", "Add", "AddSigned", "Sum", "SumSigned",
+           "UnaryOp", "Abs", "Delta",
+           ]
 
 #
 #
@@ -114,5 +116,83 @@ class SumSigned(Sum):
         sb = Signal(signed(b.shape().width))
         m.d.comb += [ sa.eq(a), sb.eq(b), ]
         return Sum.op(self, m, sa, sb)
+
+#
+#
+
+class UnaryOp(Elaboratable):
+
+    def __init__(self, layout, name=None, fields=[]):
+        self.i = Stream(layout=layout, name=add_name(name, "in"))
+        self.o = Stream(layout=layout, name=add_name(name, "out"))
+        for field in fields:
+            assert field in [ n for n,_ in layout ], (field, "not in payload")
+        self.fields = fields
+        self.enable = Signal(reset=1)
+
+    def elaborate(self, platform):
+        m = Module()
+
+        with m.If(self.i.valid & self.i.ready):
+            exclude = [ "valid", "ready", ]
+            m.d.sync += Stream.connect(self.i, self.o, exclude=exclude)
+            m.d.sync += [
+                self.i.ready.eq(0),
+                self.o.valid.eq(self.enable),
+            ]
+            for name, _ in self.i.get_layout():
+                si = getattr(self.i, name)
+                so = getattr(self.o, name)
+                if not name in self.fields:
+                    m.d.sync += [ so.eq(si) ]
+                else:
+                    self.op(m, name, si, so)
+
+        with m.If(self.o.valid & self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
+
+        with m.If((~self.i.ready) & ~self.o.valid):
+            m.d.sync += self.i.ready.eq(1)
+
+        return m
+
+#
+#
+
+class Abs(UnaryOp):
+
+    def __init__(self, layout, name="Abs", fields=[]):
+        UnaryOp.__init__(self, layout, name, fields)
+
+    def elaborate(self, platform):
+        m = UnaryOp.elaborate(self, platform)
+        return m
+
+    def op(self, m, name, si, so):
+        w = si.shape().width
+        s = Signal(signed(w))
+        m.d.comb += [ s.eq(si) ]
+        with m.If(s < 0):
+            m.d.sync +=  [ so.eq(-s) ]
+        with m.Else():
+            m.d.sync += [ so.eq(s) ]
+
+class Delta(UnaryOp):
+
+    def __init__(self, layout, name="Delta", fields=[]):
+        UnaryOp.__init__(self, layout, name, fields)
+
+    def elaborate(self, platform):
+        m = UnaryOp.elaborate(self, platform)
+        m.d.comb += self.enable.eq(0)
+        for field in self.fields:
+            si = getattr(self.i, field)
+            so = getattr(self.o, field)
+            with m.If(si != so):
+                m.d.comb += self.enable.eq(1)
+        return m
+
+    def op(self, m, name, si, so):
+        m.d.sync += [ so.eq(si) ]
 
 #   FIN

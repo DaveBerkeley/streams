@@ -3,6 +3,11 @@
 from amaranth import *
 from amaranth.sim import *
 
+import sys
+spath = "../streams"
+if not spath in sys.path:
+    sys.path.append(spath)
+
 from streams.stream import Stream
 from streams.sim import SourceSim, SinkSim
 
@@ -140,24 +145,125 @@ def check_sum_signed(data, result):
 #
 #
 
+def sim_unary(m, fn, verbose, title, vcd, data):
+    print("test", title)
+    sim = Simulator(m)
+
+    src = SourceSim(m.i, verbose=verbose)
+    sink = SinkSim(m.o)
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            yield from src.poll()
+            yield from sink.poll()
+
+    def proc():
+
+        for p in data:
+            for i, d in enumerate(p):
+                first = i == 0
+                last = i == (len(p) - 1)
+                src.push(10, data=d, first=first, last=last)
+
+        yield from tick(100)
+
+        p = sink.get_data("data")
+        fn(p)
+
+    sim.add_clock(1 / 100e6)
+    sim.add_sync_process(proc)
+    with sim.write_vcd("gtk/" + vcd):
+        sim.run()
+
+#
+#
+
+def sim_abs(m, verbose):
+    data = [
+        [ 1, 2, 3, 4, ],
+        [ 100, ],
+        [ 0, ],
+        [ -1, ],
+        [ -1, 1, ],
+        [ 1, 2, 4, 8, 16, 32, 64, ],
+        [ -1, -2, -4, -8, -16, -32, -64, ],
+    ]
+
+    def fn(p):
+        for i,pp in enumerate(data):
+            rr = p[i]
+            assert len(pp) == len(rr), (pp, rr)
+            for j in range(len(pp)):
+                assert rr[j] == abs(pp[j]), (rr, pp)
+    sim_unary(m, fn, verbose, "abs", "abs.cvd", data)
+
+def flatten(packets, filt=None):
+    if filt is None:
+        def filt(a): return a
+    r = []
+    for packet in packets:
+        for d in packet:
+            r.append(filt(d))
+    return r
+
+def sim_delta(m, verbose):
+    data = [
+        [ 0, 0, 1, 100, 100, 100, 100, 10, 10, ],
+        [ 0, 0, 1, 100, 100, 100, 100, 10, ],
+        [ -1, -2, -1, 0, 0, 0, 0, 0, 10, ],
+    ]
+    expect = [ 1, 100, 10, 0, 1, 100, 10, -1, -2, -1, 0, 10 ]
+    # delta breaks the packet structure : 
+    # it can't know a particular change is the last in a packet
+    def mask(a): return a & 0xFFFF
+    def fn(p):
+        p = flatten(p, filt=mask)
+        ex = [ mask(x) for x in expect ]
+        assert p == ex, (p, ex)
+
+    sim_unary(m, fn, verbose, "delta", "delta.cvd", data)
+
+#
+#
+
 def test(verbose):
 
-    dut = Mul(16, 32)
-    sim_ops(dut, check_mul, "ops_mul.vcd", verbose)
+    if 1:
+        dut = Mul(16, 32)
+        sim_ops(dut, check_mul, "ops_mul.vcd", verbose)
 
-    dut = MulSigned(16, 32)
-    sim_ops(dut, check_mul_signed, "ops_muls.vcd", verbose)
+        dut = MulSigned(16, 32)
+        sim_ops(dut, check_mul_signed, "ops_muls.vcd", verbose)
 
-    dut = Add(16, 32)
-    sim_ops(dut, check_add, "ops_add.vcd", verbose)
+        dut = Add(16, 32)
+        sim_ops(dut, check_add, "ops_add.vcd", verbose)
 
-    dut = AddSigned(16, 32)
-    sim_ops(dut, check_add_signed, "ops_adds.vcd", verbose)
+        dut = AddSigned(16, 32)
+        sim_ops(dut, check_add_signed, "ops_adds.vcd", verbose)
 
-    dut = Sum(16, 32)
-    sim_sum(dut, check_sum, "ops_sum.vcd", verbose)
+        dut = Sum(16, 32)
+        sim_sum(dut, check_sum, "ops_sum.vcd", verbose)
 
-    dut = SumSigned(16, 32)
-    sim_sum(dut, check_sum_signed, "ops_sums.vcd", verbose)
+        dut = SumSigned(16, 32)
+        sim_sum(dut, check_sum_signed, "ops_sums.vcd", verbose)
+
+    try:
+        dut = Abs(layout=[("data", 16)], fields=["dat"]) 
+        assert 0, "field must be in layout"
+    except:
+        pass
+    dut = Abs(layout=[("data", 16)], fields=["data"]) 
+    sim_abs(dut, verbose)
+
+    dut = Delta(layout=[("data", 16)], fields=["data"]) 
+    sim_delta(dut, verbose)
+
+#
+#
+
+if __name__ == "__main__":
+    test(True)
 
 #   FIN
