@@ -5,7 +5,7 @@ from amaranth import *
 from streams.stream import Stream, add_name
 
 __all__ = [ "BinaryOp", "Mul", "MulSigned", "Add", "AddSigned", "Sum", "SumSigned",
-           "UnaryOp", "Abs", "Delta",
+           "UnaryOp", "Abs", "Delta", "BitToN",
            ]
 
 #
@@ -123,8 +123,11 @@ class SumSigned(Sum):
 class UnaryOp(Elaboratable):
 
     def __init__(self, layout, name=None, fields=[]):
-        self.i = Stream(layout=layout, name=add_name(name, "in"))
-        self.o = Stream(layout=layout, name=add_name(name, "out"))
+        self.i = Stream(layout=layout, name="i")
+        self.o = Stream(layout=layout, name="o")
+        if (len(layout) == 1) and not fields:
+            fields = [ layout[0][0] ]
+        assert fields, (fields, "no fields specified")
         for field in fields:
             assert field in [ n for n,_ in layout ], (field, "not in payload")
         self.fields = fields
@@ -177,6 +180,9 @@ class Abs(UnaryOp):
         with m.Else():
             m.d.sync += [ so.eq(s) ]
 
+#
+#
+
 class Delta(UnaryOp):
 
     def __init__(self, layout, name="Delta", fields=[]):
@@ -194,5 +200,26 @@ class Delta(UnaryOp):
 
     def op(self, m, name, si, so):
         m.d.sync += [ so.eq(si) ]
+
+#
+#
+
+class BitToN(UnaryOp):
+
+    def __init__(self, layout, name="BitToN", fields=[]):
+        UnaryOp.__init__(self, layout, name, fields)
+        assert len(self.fields) == 1, "only one field allowed"
+
+    def elaborate(self, platform):
+        m = UnaryOp.elaborate(self, platform)
+        # don't enable tx if input is 00000
+        s = getattr(self.i, self.fields[0])
+        m.d.comb += self.enable.eq(s.any())
+        return m
+
+    def op(self, m, name, si, so):
+        for i,s in enumerate(si[:]):
+            with m.If(s):
+                m.d.sync += [ so.eq(i) ]
 
 #   FIN

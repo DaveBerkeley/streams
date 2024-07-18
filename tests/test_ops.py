@@ -223,7 +223,24 @@ def sim_delta(m, verbose):
         ex = [ mask(x) for x in expect ]
         assert p == ex, (p, ex)
 
-    sim_unary(m, fn, verbose, "delta", "delta.cvd", data)
+    sim_unary(m, fn, verbose, "delta", "delta.vcd", data)
+
+#
+#
+
+def sim_bit_to_n(m, verbose):
+    data = [
+        [ 0, 1, 2, 3, 4, 7, 8, 9, 15, 16, 17, 31, 0, 32, 33, ],
+        [ 15, 0, 27, ],
+    ]
+    expect = [
+        [ 0, 1, 1, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5  ],
+        [ 3, 4 ],
+    ]
+    def fn(p):
+        assert p == expect, (p, expect)
+
+    sim_unary(m, fn, verbose, "bit2n", "bit2n.vcd", data)
 
 #
 #
@@ -249,16 +266,14 @@ def test(verbose):
         dut = SumSigned(16, 32)
         sim_sum(dut, check_sum_signed, "ops_sums.vcd", verbose)
 
-    try:
-        dut = Abs(layout=[("data", 16)], fields=["dat"]) 
-        assert 0, "field must be in layout"
-    except:
-        pass
-    dut = Abs(layout=[("data", 16)], fields=["data"]) 
-    sim_abs(dut, verbose)
+        dut = Abs(layout=[("data", 16)]) 
+        sim_abs(dut, verbose)
 
-    dut = Delta(layout=[("data", 16)], fields=["data"]) 
-    sim_delta(dut, verbose)
+        dut = Delta(layout=[("data", 16)], fields=["data"]) 
+        sim_delta(dut, verbose)
+
+    dut = BitToN(layout=[("data", 16)]) 
+    sim_bit_to_n(dut, verbose)
 
 #
 #

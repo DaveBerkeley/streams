@@ -66,9 +66,11 @@ class StreamToRam(Elaboratable):
 
         layout = [ ( "data", width ), ]
         self.i = Stream(layout, name="i")
+        # RAM offset for start of writes
         self.offset = Signal(range(depth))
-        self.incr = Signal() # add to addr on each read (0 or 1)
+        self.incr = Signal() # add to addr on each write (0 or 1)
 
+        # internal write address
         self.addr = Signal(range(depth))
         self.port = self.mem.wr
 
