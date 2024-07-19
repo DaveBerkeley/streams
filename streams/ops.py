@@ -4,9 +4,11 @@ from amaranth import *
 
 from streams.stream import Stream, add_name
 
-__all__ = [ "BinaryOp", "Mul", "MulSigned", "Add", "AddSigned", "Sum", "SumSigned",
-           "UnaryOp", "Abs", "Delta", "BitToN",
-           ]
+__all__ = [ 
+    "BinaryOp", "Mul", "MulSigned", "Add", "AddSigned", "Sum", "SumSigned",
+    "UnaryOp", "Abs", "Delta", "BitToN",
+    "ConstSource",
+]
 
 #
 #
@@ -221,5 +223,38 @@ class BitToN(UnaryOp):
         for i,s in enumerate(si[:]):
             with m.If(s):
                 m.d.sync += [ so.eq(i) ]
+
+#
+#   Sources
+
+class ConstSource(Elaboratable):
+
+    def __init__(self, layout, fields={}):
+        self.o = Stream(layout=layout, name="o")
+        assert fields, "no const fields specified"
+        self.fields = fields 
+        outs = [ n for n,_ in layout ]
+        for name, k in fields.items():
+            assert name in outs, ("unknown field", name)
+
+    def elaborate(self, platform):
+        m = Module()
+
+        for name, k in self.fields.items():
+            s = getattr(self.o, name)
+            m.d.comb += s.eq(k)
+
+        m.d.comb += [
+            self.o.first.eq(1),
+            self.o.last.eq(1),
+        ]
+
+        with m.If(~self.o.valid):
+            m.d.sync += self.o.valid.eq(1)
+
+        with m.If(self.o.valid & self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
+
+        return m
 
 #   FIN

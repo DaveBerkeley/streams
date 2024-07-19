@@ -245,6 +245,36 @@ def sim_bit_to_n(m, verbose):
 #
 #
 
+def sim_const(m, verbose):
+    print("test const")
+    sim = Simulator(m)
+
+    sink = SinkSim(m.o)
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            yield from sink.poll()
+
+    def proc():
+
+        yield from tick(100)
+
+        p = sink.get_data("data")
+        assert p
+        for packet in p:
+            assert packet == [ 123 ]
+
+    sim.add_clock(1 / 100e6)
+    sim.add_sync_process(proc)
+    with sim.write_vcd("gtk/const.vcd"):
+        sim.run()
+
+
+#
+#
+
 def test(verbose):
 
     if 1:
@@ -272,8 +302,11 @@ def test(verbose):
         dut = Delta(layout=[("data", 16)], fields=["data"]) 
         sim_delta(dut, verbose)
 
-    dut = BitToN(layout=[("data", 16)]) 
-    sim_bit_to_n(dut, verbose)
+        dut = BitToN(layout=[("data", 16)]) 
+        sim_bit_to_n(dut, verbose)
+
+    dut = ConstSource(layout=[("data", 16)], fields={"data": 123})
+    sim_const(dut, verbose)
 
 #
 #
