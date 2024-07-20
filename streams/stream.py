@@ -114,6 +114,9 @@ class Stream:
             data.append(Const(v, shape=size))
         return Cat(*data)
 
+    def __repr__(self):
+        return f'Stream("{self.name}", {self._layout})'
+
 #
 #
 

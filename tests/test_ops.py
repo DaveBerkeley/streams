@@ -271,6 +271,62 @@ def sim_const(m, verbose):
     with sim.write_vcd("gtk/const.vcd"):
         sim.run()
 
+#
+#
+
+def sim_bit_change(m, verbose):
+    print("test bit_change")
+    sim = Simulator(m)
+
+    src = SourceSim(m.i, verbose=verbose)
+    sink = SinkSim(m.o)
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            yield from src.poll()
+            yield from sink.poll()
+
+    def proc():
+
+        data = [
+            [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ],
+            [ 0, 0, 1, 3, 7, 15, 0, 15,  ],
+        ]
+
+        for p in data:
+            for i, d in enumerate(p):
+                first = i == 0
+                last = i == (len(p) - 1)
+                src.push(10, data=d, r=1, g=2, b=3, first=first, last=last)
+
+        while not src.done():
+            yield from tick(1)
+
+        yield from tick(30)
+
+        def make_packet(n):
+            p = []
+            for i in range(4):
+                if (1 << i) & n:
+                    state = 1
+                else:
+                    state = 0
+                p.append((i, state, 1, 2, 3))
+            return p
+
+        p = sink.get_data()
+        f = flatten(data)
+        for i, packet in enumerate(p):
+            t = [ (d['data'], d['state'], d['r'], d['g'], d['b'], ) for d in packet ]
+            pp = make_packet(f[i])
+            assert t == pp, (t, pp)
+
+    sim.add_clock(1 / 100e6)
+    sim.add_sync_process(proc)
+    with sim.write_vcd("gtk/bit_change.vcd"):
+        sim.run()
 
 #
 #
@@ -305,8 +361,11 @@ def test(verbose):
         dut = BitToN(layout=[("data", 16)]) 
         sim_bit_to_n(dut, verbose)
 
-    dut = ConstSource(layout=[("data", 16)], fields={"data": 123})
-    sim_const(dut, verbose)
+        dut = ConstSource(layout=[("data", 16)], fields={"data": 123})
+        sim_const(dut, verbose)
+
+    dut = BitChange(layout=[("data", 16), ("r", 8), ("g", 8), ("b", 8)], field="data")
+    sim_bit_change(dut, verbose)
 
 #
 #

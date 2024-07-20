@@ -7,8 +7,39 @@ from streams.stream import Stream, add_name
 __all__ = [ 
     "BinaryOp", "Mul", "MulSigned", "Add", "AddSigned", "Sum", "SumSigned",
     "UnaryOp", "Abs", "Delta", "BitToN",
-    "ConstSource",
+    "ConstSource", "BitChange",
 ]
+
+#
+#
+
+def get_field(layout, field):
+    for name, width in layout:
+        if field == name:
+            return name, width
+    return None
+
+def field_in_layout(layout, field):
+    return not (get_field(layout, field) is None)
+
+def num_bits(n):
+    if n == 0:
+        raise Exception("zero bits")
+    if n == 1:
+        return 1
+    bits = 0
+    if n:
+        n -= 1
+    while n:
+        bits += 1
+        n >>= 1
+    return bits
+
+assert num_bits(1) == 1
+assert num_bits(6) == 3
+assert num_bits(7) == 3
+assert num_bits(8) == 3
+assert num_bits(9) == 4
 
 #
 #
@@ -223,6 +254,102 @@ class BitToN(UnaryOp):
         for i,s in enumerate(si[:]):
             with m.If(s):
                 m.d.sync += [ so.eq(i) ]
+
+#
+#
+
+class BitChange(Elaboratable):
+
+    def __init__(self, layout, field="data", state_field="state"):
+        assert field_in_layout(layout, field), (field, "not in layout")
+        self.field = field
+        self.state_field = state_field
+        self.i = Stream(layout=layout, name="i")
+        name, width = get_field(layout, field)
+
+        # save the input i.field 
+        self.idata = Signal(width)
+
+        olayout = []
+        for name,w in layout:
+            if name == field:
+                owidth = num_bits(w)
+                olayout.append((name, owidth))
+            else:
+                olayout.append((name, w))
+        olayout.append((state_field, 1))
+
+        self.o = Stream(layout=olayout, name="o")
+        self.bit = Signal(range(owidth+1))
+        self.end = Const(owidth)
+
+        class Others:
+
+            # save 'other' fields of the payload
+            def __init__(self, bc):
+                self.fields = []
+                for name,w in bc.i.get_layout():
+                    if not name in  [ bc.field, bc.state_field ]: 
+                        s = Signal(w)
+                        setattr(self, name, s)
+                        self.fields.append(name)
+            def eq(self, s, swap=False):
+                r = []
+                for name in self.fields:
+                    dst = getattr(self, name)
+                    src = getattr(s, name)
+                    if swap:
+                        dst, src = src, dst
+                    r += [ dst.eq(src) ]
+                return r
+
+        self.others = Others(self)
+
+    def tx(self, m):
+        m.d.sync += [
+            self.o.valid.eq(1),
+            self.o.first.eq(self.bit == 0),
+            self.o.last.eq(self.bit == (self.end-1)),
+        ]
+        m.d.sync += self.others.eq(self.o, swap=True)
+
+        so = getattr(self.o, self.field)
+        m.d.sync += so.eq(self.bit)
+
+        state = getattr(self.o, self.state_field)
+        m.d.sync += state.eq(self.idata.bit_select(self.bit, width=1))
+
+    def elaborate(self, platform):
+        m = Module()
+
+        with m.FSM(reset="INIT"):
+
+            with m.State("INIT"):
+                m.d.sync += self.i.ready.eq(1)
+                m.next = "RX"
+
+            with m.State("RX"):
+                with m.If(self.i.valid & self.i.ready):
+                    m.d.sync += self.others.eq(self.i)
+                    s = getattr(self.i, self.field)
+                    m.d.sync += self.idata.eq(s)
+                    m.d.sync += self.i.ready.eq(0)
+                    m.d.sync += self.bit.eq(0)
+                    m.next = "TX"
+
+            with m.State("TX"):
+                with m.If(self.o.ready & self.o.valid):
+                    m.d.sync += self.o.valid.eq(0)
+                    m.d.sync += self.bit.eq(self.bit + 1)
+
+                with m.If(~self.o.valid):
+                    with m.If(self.bit == self.end):
+                        m.d.sync += self.i.ready.eq(1)
+                        m.next = "RX"
+                    with m.Else():
+                        self.tx(m)
+
+        return m
 
 #
 #   Sources
