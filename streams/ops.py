@@ -229,7 +229,7 @@ class BitToN(UnaryOp):
 
 class ConstSource(Elaboratable):
 
-    def __init__(self, layout, fields={}):
+    def __init__(self, layout, name=None, fields={}):
         self.o = Stream(layout=layout, name="o")
         assert fields, "no const fields specified"
         self.fields = fields 
