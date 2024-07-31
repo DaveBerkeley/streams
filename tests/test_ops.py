@@ -331,6 +331,44 @@ def sim_bit_change(m, verbose):
 #
 #
 
+def sim_decimate(m, verbose):
+    print("test decimate")
+    sim = Simulator(m)
+
+    src = SourceSim(m.i, verbose=verbose)
+    sink = SinkSim(m.o)
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            yield from src.poll()
+            yield from sink.poll()
+
+    def proc():
+
+        data = list(range(100))
+
+        for p in data:
+            src.push(0, data=p)
+
+        while not src.done():
+            yield from tick(1)
+
+        yield from tick(30)
+
+        p = sink.get_data("data")
+        r = [ list(range(0, 100, 4)) ]
+        assert p == r, (p, r)
+
+    sim.add_clock(1 / 100e6)
+    sim.add_sync_process(proc)
+    with sim.write_vcd("gtk/decimate.vcd"):
+        sim.run()
+
+#
+#
+
 def test(verbose):
 
     if 1:
@@ -364,13 +402,16 @@ def test(verbose):
         dut = ConstSource(layout=[("data", 16)], fields={"data": 123})
         sim_const(dut, verbose)
 
-    dut = BitChange(layout=[("data", 16), ("r", 8), ("g", 8), ("b", 8)], field="data")
-    sim_bit_change(dut, verbose)
+        dut = BitState(layout=[("data", 16), ("r", 8), ("g", 8), ("b", 8)], field="data")
+        sim_bit_change(dut, verbose)
+
+    dut = Decimate(4, layout=[("data", 16)])
+    sim_decimate(dut, verbose)
 
 #
 #
 
 if __name__ == "__main__":
-    test(True)
+    test(False)
 
 #   FIN

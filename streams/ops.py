@@ -6,8 +6,8 @@ from streams.stream import Stream, add_name
 
 __all__ = [ 
     "BinaryOp", "Mul", "MulSigned", "Add", "AddSigned", "Sum", "SumSigned",
-    "UnaryOp", "Abs", "Delta", "BitToN",
-    "ConstSource", "BitChange",
+    "UnaryOp", "Abs", "Delta", "BitToN", "Decimate",
+    "ConstSource", "BitState",
 ]
 
 #
@@ -258,7 +258,34 @@ class BitToN(UnaryOp):
 #
 #
 
-class BitChange(Elaboratable):
+class Decimate(UnaryOp):
+
+    def __init__(self, n, layout, name="BitToN", fields=[]):
+        UnaryOp.__init__(self, layout, name, fields)
+        assert len(self.fields) == 1, "only one field allowed"
+        assert n > 1
+        self.n = n - 1
+        self.count = Signal(range(n+1))
+
+    def elaborate(self, platform):
+        m = UnaryOp.elaborate(self, platform)
+
+        # only pass every Nth signal
+        m.d.comb += self.enable.eq(self.count == 0)
+        return m
+
+    def op(self, m, name, si, so):
+        m.d.sync += self.count.eq(self.count + 1)
+
+        with m.If(self.count == self.n):
+            m.d.sync += self.count.eq(0)
+
+        m.d.sync += [ so.eq(si) ]
+
+#
+#
+
+class BitState(Elaboratable):
 
     def __init__(self, layout, field="data", state_field="state"):
         assert field_in_layout(layout, field), (field, "not in layout")
