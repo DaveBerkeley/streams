@@ -156,6 +156,8 @@ class SumSigned(Sum):
 class UnaryOp(Elaboratable):
 
     def __init__(self, layout, name=None, fields=[]):
+        if name:
+            self.name = name
         self.i = Stream(layout=layout, name="i")
         self.o = Stream(layout=layout, name="o")
         if (len(layout) == 1) and not fields:
@@ -199,10 +201,6 @@ class Abs(UnaryOp):
 
     def __init__(self, layout, name="Abs", fields=[]):
         UnaryOp.__init__(self, layout, name, fields)
-
-    def elaborate(self, platform):
-        m = UnaryOp.elaborate(self, platform)
-        return m
 
     def op(self, m, name, si, so):
         w = si.shape().width
@@ -260,9 +258,8 @@ class BitToN(UnaryOp):
 
 class Decimate(UnaryOp):
 
-    def __init__(self, n, layout, name="BitToN", fields=[]):
-        UnaryOp.__init__(self, layout, name, fields)
-        assert len(self.fields) == 1, "only one field allowed"
+    def __init__(self, n, layout, name=None):
+        UnaryOp.__init__(self, layout, name or f"Decimate({n})", fields=layout[0][0])
         assert n > 1
         self.n = n - 1
         self.count = Signal(range(n+1))

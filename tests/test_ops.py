@@ -347,19 +347,23 @@ def sim_decimate(m, verbose):
 
     def proc():
 
-        data = list(range(100))
+        a = list(range(100))
+        b = list([ (i+2) for i in range(100) ])
 
-        for p in data:
-            src.push(0, data=p)
+        for i in range(len(a)):
+            src.push(0, a=a[i], b=b[i])
 
         while not src.done():
             yield from tick(1)
 
         yield from tick(30)
 
-        p = sink.get_data("data")
-        r = [ list(range(0, 100, 4)) ]
-        assert p == r, (p, r)
+        ra = sink.get_data("a")[0]
+        rb = sink.get_data("b")[0]
+        xa = [ a[i] for i in range(0, len(a), 4) ]
+        xb = [ b[i] for i in range(0, len(a), 4) ]
+        assert ra == xa, (ra, xa)
+        assert rb == xb, (rb, xb)
 
     sim.add_clock(1 / 100e6)
     sim.add_sync_process(proc)
@@ -405,7 +409,7 @@ def test(verbose):
         dut = BitState(layout=[("data", 16), ("r", 8), ("g", 8), ("b", 8)], field="data")
         sim_bit_change(dut, verbose)
 
-    dut = Decimate(4, layout=[("data", 16)])
+    dut = Decimate(4, layout=[("a", 16), ("b", 8)])
     sim_decimate(dut, verbose)
 
 #
