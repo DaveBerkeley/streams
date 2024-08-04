@@ -259,7 +259,8 @@ class BitToN(UnaryOp):
 class Decimate(UnaryOp):
 
     def __init__(self, n, layout, name=None):
-        UnaryOp.__init__(self, layout, name or f"Decimate({n})", fields=layout[0][0])
+        fields = layout[0][0]
+        UnaryOp.__init__(self, layout, name or f"Decimate({n})", fields=[fields])
         assert n > 1
         self.n = n - 1
         self.count = Signal(range(n+1))
