@@ -95,6 +95,8 @@ class Cluster:
 
 def get_clusters(m, nest=1, d=None):
     cluster = Cluster(m)
+    if hasattr(m, "dot_dont_expand"):
+        return cluster
 
     names = d or {}
     names[id(m)] = True
