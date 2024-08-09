@@ -5,7 +5,7 @@ from amaranth import *
 from streams.stream import Stream, add_name
 
 __all__ = [ 
-    "BinaryOp", "Mul", "MulSigned", "Add", "AddSigned", "Sum", "SumSigned",
+    "BinaryOp", "Mul", "MulSigned", "Add", "AddSigned", "Sum", "SumSigned", "Max",
     "UnaryOp", "Abs", "Delta", "BitToN", "Decimate",
     "ConstSource", "BitState",
 ]
@@ -149,6 +149,24 @@ class SumSigned(Sum):
         sb = Signal(signed(b.shape().width))
         m.d.comb += [ sa.eq(a), sb.eq(b), ]
         return Sum.op(self, m, sa, sb)
+
+#
+#
+
+class Max(BinaryOp):
+
+    def op(self, m, a, b):
+        sa = Signal(signed(a.shape().width))
+        sb = Signal(signed(b.shape().width))
+        m.d.comb += [
+            sa.eq(a),
+            sb.eq(b),
+        ]
+        with m.If(sa > sb):
+            m.d.sync += self.o.data.eq(sa)
+        with m.Else():
+            m.d.sync += self.o.data.eq(sb)
+        return []
 
 #
 #

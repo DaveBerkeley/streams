@@ -373,6 +373,44 @@ def sim_decimate(m, verbose):
 #
 #
 
+def sim_max(m, verbose):
+    print("test max")
+    sim = Simulator(m)
+
+    src = SourceSim(m.i, verbose=verbose)
+    sink = SinkSim(m.o)
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            yield from src.poll()
+            yield from sink.poll()
+
+    def proc():
+
+        a = [ 0, 1, 10, 100, 1000 ]
+        b = [ 1, 3, 5, 50, 2000 ]
+
+        for i in range(len(a)):
+            src.push(10, a=a[i], b=b[i])
+
+        while not src.done():
+            yield from tick(1)
+
+        yield from tick(30)
+
+        r = sink.get_data("data")
+        assert r == [ [ 1, 3, 10, 100, 2000 ] ], r
+
+    sim.add_clock(1 / 100e6)
+    sim.add_sync_process(proc)
+    with sim.write_vcd("gtk/max.vcd"):
+        sim.run()
+
+#
+#
+
 def test(verbose):
 
     if 1:
@@ -411,6 +449,9 @@ def test(verbose):
 
     dut = Decimate(4, layout=[("a", 16), ("b", 8)])
     sim_decimate(dut, verbose)
+
+    dut = Max(16, 16);
+    sim_max(dut, verbose)
 
 #
 #
