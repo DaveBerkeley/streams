@@ -336,7 +336,6 @@ class Join(Elaboratable):
         return False
 
     def __init__(self, first_field=None, name=None, **kwargs):
-        self.first_field = first_field
         # eg Join(a=[("x", 12)], b=[("y", 12)])
         self.i = []
         layouts = []
@@ -354,6 +353,12 @@ class Join(Elaboratable):
             self.i.append(s)
             layouts += layout
             self.fields.append(payload)
+
+        if not first_field:
+            # if first_field is not specified, just use the first one
+            x = self.i[0].get_layout()
+            first_field = x[0][0]
+        self.first_field = first_field
 
         self.o = Stream(layout=layouts, name=add_name(name, ','.join(self.fields)))
 

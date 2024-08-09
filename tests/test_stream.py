@@ -3,6 +3,11 @@
 from amaranth import *
 from amaranth.sim import *
 
+import sys
+spath = "../streams"
+if not spath in sys.path:
+    sys.path.append(spath)
+
 from streams.stream import to_packet, StreamInit, StreamNull, Tee, Join, Split, GatePacket, Arbiter
 from streams.sim import SourceSim, SinkSim
 
@@ -462,7 +467,7 @@ def test(verbose=False):
     dut = Tee(3, layout, wait_all=True)
     sim_tee(dut, verbose)
 
-    dut = Join(first_field="a", a=[("a", 8)], b=[("b", 8)])
+    dut = Join(a=[("a", 8)], b=[("b", 8)])
     sim_join(dut, verbose)
 
     dut = Split(layout=[("a", 12), ("b", 8), ("c", 8)])
@@ -473,5 +478,11 @@ def test(verbose=False):
 
     dut = Arbiter(layout=[("data", 16)], n=3)
     sim_arbiter(dut, verbose)
+
+#
+#
+
+if __name__ == "__main__":
+    test()
 
 #   FIN
