@@ -411,6 +411,63 @@ def sim_max(m, verbose):
 #
 #
 
+def sim_enum(m, verbose):
+    print("test enum")
+    sim = Simulator(m)
+
+    sink = SinkSim(m.o)
+    src = SourceSim(m.i, verbose=verbose)
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            yield from sink.poll()
+            yield from src.poll()
+
+    def proc():
+
+        data = [
+            [ 10, [ 1, 2, 3, 4 ] ],
+            [ 10, [ 100 ] ],
+            [ 10, [ 0, 1, 2, 3, 10 ] ],
+        ]
+
+        for t, packet in data:
+            for i, d in enumerate(packet):
+                src.push(t, data=d, first=(i==0), last=(i == (len(packet)-1)))
+
+        yield from tick(10)
+
+        while not src.done():
+            yield from tick(1)
+
+        yield from tick(10)
+
+        d = sink.get_data("data")
+        a = sink.get_data("addr")
+        x = sink.get_data("aux")
+
+        assert d[0] == [ 1, 2, 3, 4 ], d[0]
+        assert x[0] == [ 0, 0, 0, 0 ], x[0]
+        assert a[0] == [ 3, 4, 5, 6 ], a[0]
+
+        assert d[1] == [ 100 ], d[1]
+        assert x[1] == [ 0 ], x[1]
+        assert a[1] == [ 3, ], a[1]
+
+        assert d[2] == [ 0, 1, 2, 3, 10 ], d[2]
+        assert x[2] == [ 0, 0, 0, 0, 0 ], x[2]
+        assert a[2] == [ 3, 4, 5, 6, 7 ], a[2]
+
+    sim.add_clock(1 / 50e6)
+    sim.add_sync_process(proc)
+    with sim.write_vcd("gtk/enum.vcd", traces=[]):
+        sim.run()
+
+#
+#
+
 def test(verbose):
 
     if 1:
@@ -452,6 +509,10 @@ def test(verbose):
 
     dut = Max(16, 16);
     sim_max(dut, verbose)
+
+    layout = [("data", 16), ("aux", 4) ]
+    dut = Enumerate(layout=layout, idx=[("addr", 8)], offset=3)
+    sim_enum(dut, verbose)
 
 #
 #

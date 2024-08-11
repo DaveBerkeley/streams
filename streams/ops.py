@@ -6,7 +6,7 @@ from streams.stream import Stream, add_name
 
 __all__ = [ 
     "BinaryOp", "Mul", "MulSigned", "Add", "AddSigned", "Sum", "SumSigned", "Max",
-    "UnaryOp", "Abs", "Delta", "BitToN", "Decimate",
+    "UnaryOp", "Abs", "Delta", "BitToN", "Decimate", "Enumerate",
     "ConstSource", "BitState",
 ]
 
@@ -297,6 +297,44 @@ class Decimate(UnaryOp):
             m.d.sync += self.count.eq(0)
 
         m.d.sync += [ so.eq(si) ]
+
+#
+#   Add an index field to a packet, starting with 'offset', 
+#   incrementing with each data element.
+
+class Enumerate(UnaryOp):
+
+    def __init__(self, idx=[("idx", 8)], offset=0, **kwargs):
+        if not "fields" in kwargs:
+            # default to first field in layout (it doesn't matter which)
+            fields = list([ p[0] for p in kwargs["layout"] ])
+            kwargs["fields"] = [ fields[0] ]
+        if not "name" in kwargs:
+            if offset:
+                name = f"Enumerate(offset={offset})"
+            else:
+                name = f"Enumerate()"
+            kwargs["name"] = name
+        super().__init__(**kwargs)
+        assert len(idx) == 1, idx
+        self.idx_name, w = idx[0]
+        self.offset = Const(offset)
+        layout = self.i.get_layout()
+        # overwrite the default output stream, adding the idx
+        self.o = Stream(layout=layout + idx, name="o")
+
+        self.idx = Signal(w)
+
+    def op(self, m, name, si, so):
+        s = getattr(self.o, self.idx_name)
+        m.d.sync += [
+            so.eq(si),
+            s.eq(self.idx + self.offset),
+            self.idx.eq(self.idx + 1),
+        ]
+
+        with m.If(self.i.last):
+            m.d.sync += self.idx.eq(0)
 
 #
 #

@@ -124,7 +124,9 @@ class LedStream(Elaboratable):
         self.idle = Signal()
 
         self.mem = DualPortMemory(24, N)
+        self.mem.dot_dont_expand = True
         self.ws2812 = WS2812(self.mem.rd, N)
+        self.mem.rd.dot_dont_expand = True
 
     def elaborate(self, platform):
         m = Module()
