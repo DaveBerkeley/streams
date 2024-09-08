@@ -510,143 +510,101 @@ class GatePacket(Elaboratable):
         return m
 
 #
-#   n-bit Arbiter : Round-Robin arbiter with n inputs
+#   Temporary bodge because the old n-input Arbiter
+#   goes combinatorially crazy with any number of inputs over 4.
+#   So construct a tree of n-1 2-input Arbiters instead.
 
-class ArbState(IntEnum):
+class _Arbiter(Elaboratable):
 
-    IDLE, START, COPY, STOP = range(4)
-
-class Arbiter(Elaboratable):
-
-    def __init__(self, layout, n=None, name=None):
+    def __init__(self, layout, n, name=None):
+        assert n == 2
         self.i = []
-        for i in range(n):
-            s = Stream(layout=layout, name=add_name(name, f"i[{i}]"))
+        for i in range(2):
+            label = f"i_{i}"
+            s = Stream(layout=layout, name=label)
             self.i.append(s)
-            setattr(self, f"_i{i}", s)
+            setattr(self, label, s)
 
-        self.o = Stream(layout=layout, name=add_name(name, "out"))
+        self.o = Stream(layout=layout, name="o")
 
-        self.idx = Signal(range(len(self.i)))
-        self.state = Signal(ArbState)
-
-        self.valids = Signal(len(self.i))
-        self.readies = Signal(len(self.i))
-        self.arb_idx = Signal(len(self.i))
-
-        # Generate a arbitration table
-        def num_bits(x):
-            # http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetKernighan
-            bits = 0
-            while x:
-                bits += 1
-                x &= x-1
-            return bits
-
-        def nth(mask, idx):
-            # get the index of each set bit
-            m = mask
-            bits = []
-            while m:
-                lowest = m & -m
-                bits.append(lowest)
-                m &= 1 << lowest
-            return bits[idx % len(bits)]
-
-        def to_idx(mask):
-            assert mask
-            for i in range(len(self.i)):
-                if mask == (1 << i):
-                    return i
-            assert 0, ("mask not found", mask)
-
-        arbs = []
-        for i in range(1 << len(self.i)):
-            for v in range(1 << len(self.i)):
-                # all possible 'valids' combinations
-                bits = num_bits(v)
-                if bits == 0:
-                    arb = 0
-                elif bits == 1:
-                    arb = to_idx(v)
-                else:
-                    # need to arbitrate
-                    arb = to_idx(nth(v, i))
-                arbs.append(Const(arb))
-
-        self.arb = Array(arbs)
+        self.busy = Signal()
 
     def elaborate(self, platform):
         m = Module()
 
-        with m.If(self.o.valid & self.o.ready):
-            # Tx output
-            m.d.sync += self.o.valid.eq(0)
+        with m.If(self.o.ready & self.o.valid):
+            # send data
+            m.d.sync += [
+                self.o.valid.eq(0),
+                #self.busy.eq(0),
+            ]
 
-        for s in self.i:
-            with m.If(s.valid & s.ready):
-                m.d.sync += s.ready.eq(0)
+        m.d.comb += self.busy.eq(self.o.valid | self.i[0].ready | self.i[1].ready)
 
-        m.d.comb += self.valids.eq(Cat(* [ (s.valid & s.first) for s in self.i ] ))
-        m.d.comb += self.readies.eq(Cat(* [ s.ready for s in self.i ] ))
+        with m.If(~self.busy):
+            with m.If(self.i[0].valid):
+                m.d.sync += [
+                    self.i[0].ready.eq(1),
+                    #self.busy.eq(1),
+                ]
+            with m.Elif(self.i[1].valid):
+                m.d.sync += [
+                    self.i[1].ready.eq(1),
+                    #self.busy.eq(1),
+                ]
 
-        idx = Cat(self.valids, self.arb_idx)
+        for i in range(2):
+            with m.If(self.i[i].valid & self.i[i].ready):
+                m.d.sync += [
+                    self.i[i].ready.eq(0),
+                    self.o.valid.eq(1),
+                    self.o.payload_eq(self.i[i].cat_payload(flags=True), flags=True)
+                ]
 
-        with m.If(self.state == ArbState.IDLE):
-            # waiting for an input packet
+        return m
 
-            with m.If(self.o.ready):
-                with m.If(self.valids):
+class Arbiter(Elaboratable):
 
-                    def start(s, idx):
-                        return [ 
-                            s.ready.eq(1),
-                            self.state.eq(ArbState.START),
-                            self.idx.eq(idx),
-                        ]
+    def __init__(self, layout, n, name=None):
 
-                    for i, s in enumerate(self.i):
-                        with m.If(i == self.arb[idx]):
-                            m.d.sync += start(s, i)
-                            m.d.sync += self.arb_idx.eq(self.arb_idx+1)
+        assert n > 1
+        self.i = []
+        for i in range(n):
+            label = f"i_{i}"
+            s = Stream(layout=layout, name=label)
+            self.i.append(s)
+            setattr(self, label, s)
 
-        def copy(s):
-            with m.If(s.ready & s.valid):
-                m.d.sync += Stream.connect(s, self.o, exclude=["ready","valid"], silent=True)
-                m.d.sync += s.ready.eq(0)
-                m.d.sync += self.o.valid.eq(1)
-                m.d.sync += self.state.eq(ArbState.COPY)
+        self.o = Stream(layout, "o")
 
-                with m.If(s.last):
-                    m.d.sync += self.state.eq(ArbState.STOP)
+        self.mods = []
+        for i in range(n-1):
+            label = f"arb_{i}"
+            s = _Arbiter(layout, n=2, name=label)
+            s.name = label
+            self.mods.append(s)
+            setattr(self, label, s)
 
-            with m.If(self.o.ready & ~s.ready):
-                m.d.sync += s.ready.eq(1)
+    def elaborate(self, platform):
+        m = Module()
+        m.submodules += self.mods
 
-        with m.If(self.state == ArbState.START):
-            for i, s in enumerate(self.i):
-                with m.If(i == self.idx):
-                    with m.If(~s.valid):
-                        # input has disapeared! Start again
-                        # But we've already read data from one of the inputs!
-                        # What to do!
-                        m.d.sync += s.ready.eq(0)
-                        m.d.sync += self.state.eq(ArbState.IDLE)
-                    with m.Else():
-                        copy(s)
-                with m.Else():
-                    m.d.sync += s.ready.eq(0)
+        ins = self.i[:]
+        arbs = self.mods[:]
+        while len(arbs):
+            #print([ x.name for x in ins ], [ x.name for x in arbs ])
+            assert len(ins) >= 2
+            arb, arbs = arbs[0], arbs[1:]
+            i1, i2, ins = ins[0], ins[1], ins[2:]
+            #print("connect", i1.name, i2.name, arb.name)
+            m.d.comb += Stream.connect(i1, arb.i[0])
+            m.d.comb += Stream.connect(i2, arb.i[1])
+            ins.append(arb.o)
 
-        with m.If(self.state == ArbState.COPY):
-            for i, s in enumerate(self.i):
-                with m.If(i == self.idx):
-                    copy(s)
-
-        with m.If(self.state == ArbState.STOP):
-            for i, s in enumerate(self.i):
-                m.d.sync += s.ready.eq(0)
-            m.d.sync += self.state.eq(ArbState.IDLE)
-
+        arb = ins[0]
+        #print("connect", arb.name, self.o.name)
+        m.d.comb += Stream.connect(arb, self.o)
+        
         return m
 
 #   FIN
