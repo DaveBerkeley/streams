@@ -431,6 +431,8 @@ class Split(Elaboratable):
                 m.d.sync += [
                     f.eq(v),
                     s.valid.eq(1),
+                    s.first.eq(self.i.first),
+                    s.last.eq(self.i.last),
                 ]
 
         return m

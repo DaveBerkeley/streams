@@ -273,8 +273,8 @@ def sim_split(m, verbose):
         #for i, p in enumerate(zip(aa, bb)):
         #    assert p == (a_data[i][1], b_data[i][1])
         print(a)
-        print(c)
         print(b)
+        print(c)
         x = zip(a, b, c)
         print([ x for x in zip(*data) ])
         print("TODO")
