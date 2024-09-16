@@ -309,6 +309,7 @@ class SpiPeripheral(Elaboratable):
 
         layout = [ ("data", width), ]
         self.i = Stream(layout=layout, name=f"{name}in")
+        self.pre = Stream(layout=layout, name=f"{name}pre")
         self.o = Stream(layout=layout, name=f"{name}out")
 
         self.odata = Signal(width)
@@ -329,16 +330,17 @@ class SpiPeripheral(Elaboratable):
         if self.rd_packet:
             m.submodules += self.rd_packet
             # Insert SpiReadPacket() before the output stream
-            ostream = self.o
+            ostream = self.pre
             m.d.comb += Stream.connect(ostream, self.rd_packet.i)
-            self.o = self.rd_packet.o
+            m.d.comb += Stream.connect(self.rd_packet.o, self.o)
             # connect the sample/stop signals
             m.d.comb += [
                 self.rd_packet.stop.eq(self.stop),
                 self.rd_packet.sample.eq(self.sample),
             ]
         else:
-            ostream = self.o
+            ostream = self.pre
+            m.d.comb += Stream.connect(ostream, self.o)
 
         m.d.comb += self.phy.cipo.eq(self.cipo)
         m.d.comb += self.cipo.eq(self.sro[self.width-1])
