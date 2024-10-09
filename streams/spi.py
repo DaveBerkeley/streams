@@ -1,7 +1,5 @@
 #!/bin/env python3
 
-from enum import IntEnum, unique
-
 from amaranth import *
 
 from amaranth.lib.cdc import FFSynchronizer
@@ -18,13 +16,9 @@ class Phy:
         self.cipo = Signal()
         self.copi = Signal()
 
-@unique
-class State(IntEnum):
-    IDLE, BUSY, PAUSE, STOP = range(4)
-
 class SpiController(Elaboratable):
 
-    def __init__(self, width, init=[], cpol=0, cpha=0, last_cs=False, name=""):
+    def __init__(self, width, cpol=0, cpha=0, last_cs=False, name=""):
         self.width = width
         self.last_cs = last_cs
         self.cpol = Signal(reset=cpol)
@@ -37,36 +31,23 @@ class SpiController(Elaboratable):
 
         self.enable = Signal() # 2clock
         self.transition = Signal() # delayed 2clock
-        self.half = Signal()
+        self.half = Signal() # enable / 2
 
         self.p1 = Signal()
         self.p2 = Signal()
         self.shift = Signal()
         self.sample = Signal()
-        self.wait = Signal()
-        self.ilast = Signal()
-        self.odata = Signal(width)
 
         layout = [ ("data", width), ]
-        self.i = Stream(layout, name=f"{name}in")
-        self._i = Stream(layout, name=f"{name}int")
-        self.o = Stream(layout, name=f"{name}out")
-        if init:
-            self.init = StreamInit(init, layout)
-            self.starting = Signal(reset=1)
-        else:
-            self.init = None
-            self.starting = Signal()
+        self.i = Stream(layout, name=f"{name}i")
+        self.o = Stream(layout, name=f"{name}o")
+        self.last = Signal(reset=1)
+        self.first = Signal()
 
         self.sro = Signal(width)
         self.sri = Signal(width)
 
         self.bit = Signal(range(width+1))
-
-        self.state = Signal(State, reset=State.IDLE)
-
-    def is_idle(self):
-        return self.state == State.IDLE
 
     def elaborate(self, platform):
         m = Module()
@@ -74,148 +55,101 @@ class SpiController(Elaboratable):
         m.submodules += FFSynchronizer(self.phy.cipo, self.cipo)
         m.submodules += FFSynchronizer(self.enable, self.transition)
 
-        if self.init:
-            m.submodules += self.init
-
-        if self.init:
-            with m.If(self.starting):
-                m.d.comb += Stream.connect(self.init.o, self._i)
-            with m.Else():
-                m.d.comb += Stream.connect(self.i, self._i)
-
-            m.d.comb += self.starting.eq(~self.init.done)
-        else:
-            m.d.comb += Stream.connect(self.i, self._i)
-
         m.d.comb += [
             self.phy.copi.eq(self.sro[self.width - 1]),
-            self.phy.sck.eq(self.half ^ self.cpol),
+            self.phy.sck.eq(self.sck ^ self.cpol),
         ]
+
+        with m.If(self.enable):
+            m.d.sync += self.half.eq(~self.half)
 
         m.d.comb += [
-            self.p1.eq(0),
-            self.p1.eq(0),
+            self.p1.eq(self.transition & ~self.half),
+            self.p2.eq(self.transition & self.half),
         ]
-
-        with m.If(self.state == State.BUSY):
-            m.d.comb += [
-                self.p1.eq(self.transition & ~self.half),
-                self.p2.eq(self.transition & self.half),
-            ]
-
+ 
         with m.If(self.cpha):
             m.d.comb += [
                 self.sample.eq(self.p2),
-                self.shift.eq(self.p1 & ~self.wait),
+                self.shift.eq(self.p1),
             ]
         with m.Else():
             m.d.comb += [
                 self.sample.eq(self.p1),
-                self.shift.eq(self.p2 & ~self.wait),
+                self.shift.eq(self.p2),
             ]
 
-        with m.If(self._i.ready):
-            m.d.sync += self._i.ready.eq(0)
+        with m.If(self.o.ready & self.o.valid):
+            m.d.sync += self.o.valid.eq(0)
 
-        with m.If(self.o.valid & self.o.ready):
-            m.d.sync += [
-                self.o.valid.eq(0),
-                self.o.first.eq(0),
-            ]
+        with m.FSM(reset="READ"):
 
-        def read():
-            return [
-                self.sro.eq(self._i.data),
-                self.ilast.eq(self._i.last),
-                self._i.ready.eq(1),
-                self.bit.eq(self.width),
-            ]
+            with m.State("READ"):
 
-        def stop():
-            return [
-                self.phy.scs.eq(1),                    
-                self.half.eq(0),
-                self.state.eq(State.STOP)
-            ]
- 
-        with m.If(self.state == State.IDLE):
-
-            m.d.sync += [
-                self._i.ready.eq(0),
-                self.phy.scs.eq(1),
-                self.half.eq(0),
-                self.o.first.eq(1),
-            ]
-
-            with m.If(self._i.valid & self.transition):
-                # Start Tx
-                m.d.sync += read()
                 m.d.sync += [
-                    self.phy.scs.eq(0),
-                    self.wait.eq(1),
-                    self.state.eq(State.BUSY),
-                ]
-
-        with m.If(self.state == State.BUSY):
-
-            with m.If(self.transition):
-                m.d.sync += self.half.eq(~self.half)
-                with m.If(self.half):
-                    m.d.sync += self.bit.eq(self.bit - 1)
-
-            with m.If(self.sample):
-                m.d.sync += [
-                    self.sri.eq(Cat(self.phy.cipo, self.sri)),
-                    self.wait.eq(0),
-                ]
-
-            with m.If(self.shift):
-                m.d.sync += [
-                    self.sro.eq(Cat(0, self.sro)),
-                ]
-
-            with m.If(self.transition & (self.bit == 0)):
-
-                #   Tx data
-                m.d.sync += [
-                    self.o.data.eq(self.sri),
-                    self.o.valid.eq(1),
-                    self.o.last.eq(self.ilast),
+                    self.i.ready.eq(1),
                 ]
 
                 if self.last_cs:
-                    # needs 'last' on input stream, to transition to 'STOP'
-                    with m.If(self.ilast):
-                        # Only STOP when the 'last' flag is set
-                        m.d.sync += stop()
-                    with m.Else():
-                        # restart the bit counter, get next word
-                        m.d.sync += [
-                            self.bit.eq(self.width),
-                            self.state.eq(State.PAUSE),
-                            self.half.eq(0),
-                            self.wait.eq(self.cpha),
-                            self._i.ready.eq(1),
-                        ]
-
+                    m.d.sync += self.phy.scs.eq(self.last)
                 else:
-                    m.d.sync += stop()
+                    m.d.sync += self.phy.scs.eq(1)
 
-        with m.If(self.state == State.PAUSE):
+                with m.If(self.i.ready & self.i.valid):
+                    m.d.sync += [
+                        self.i.ready.eq(0),
+                        self.sro.eq(self.i.data),
+                        self.last.eq(self.i.last),
+                        self.first.eq(self.i.first),
+                        self.sri.eq(0),
+                    ]
+                    m.next = "START_WAIT"
 
-            with m.If(self.i.valid & self.i.ready):
-                m.d.sync += read()
-                m.d.sync += self.state.eq(State.BUSY)
+            with m.State("START_WAIT"):
+                with m.If(self.sample):
+                    m.d.sync += [
+                        self.phy.scs.eq(0),
+                        self.sck.eq(0),
+                        self.bit.eq(0),
+                    ]
+                    m.next = "START"
 
-        with m.If(self.state == State.STOP):
+            with m.State("START"):
+                with m.If(self.shift):
+                    m.next = "SHIFT"
 
-            with m.If(self.transition):
-                m.d.sync += [
-                    self.state.eq(State.IDLE),
-                ]
+            with m.State("SHIFT"):
+
+                with m.If(self.shift):
+                    m.d.sync += [
+                        self.sro.eq(Cat(0, self.sro)),
+                        self.sck.eq(0),
+                        self.bit.eq(self.bit + 1),
+                    ]
+                    with m.If(self.bit == (self.width - 1)):
+                        m.d.sync += [
+                            self.o.valid.eq(1),
+                            self.o.data.eq(self.sri),
+                            self.o.first.eq(self.first),
+                            self.o.last.eq(self.last),
+                            self.first.eq(0),
+                        ]
+                        m.next = "STOP"
+
+                with m.If(self.sample):
+                    m.d.sync += [
+                        self.sck.eq(1),
+                        self.sri.eq(Cat(self.cipo, self.sri)),
+                    ]
+
+            with m.State("STOP"):
+                with m.If(self.last_cs & ~self.last):
+                    m.next = "READ"
+                with m.If(self.sample):
+                    m.next = "READ"
 
         return m
-
+ 
     def ports(self):
         return [
             self.phy.sck, 

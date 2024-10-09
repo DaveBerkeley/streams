@@ -1,6 +1,12 @@
+#!/usr/bin/env python3
 
 from amaranth import *
 from amaranth.sim import *
+
+import sys
+spath = "../streams"
+if not spath in sys.path:
+    sys.path.append(spath)
 
 from streams import to_packet
 from streams.spi import SpiController, SpiPeripheral, SpiClock
@@ -9,7 +15,7 @@ from streams.sim import SinkSim, SourceSim
 #
 #
 
-def sim_controller(m, init, verbose):
+def sim_controller(m, verbose):
     print("test controller")
     sim = Simulator(m)
 
@@ -42,21 +48,21 @@ def sim_controller(m, init, verbose):
         # wait for Tx
         while True:
             yield from tick()
-            if len(rd.get_data()) == (len(init) + len(d1)):
+            if wr.done():
                 break
 
-        yield m.cpha.eq(1)
-
+        # wait for input ready and not valid
         while True:
             yield from tick()
-            if len(rd.get_data()) == (len(init) + len(d1) + len(d2)):
+            r = yield m.i.ready
+            v = yield m.i.valid
+            if r and not v:
                 break
 
-        yield from tick(9 * period * 2)
+        yield from tick(20)
 
-        rx = [ p[0] for p in rd.get_data('data') ]
-        i = [ x['data'] for x in init ]
-        assert rx == (i + d1 + d2), (rx, i, d1, d2)
+        rx = rd.get_data("data")
+        assert rx == [ d1, d2 ]
 
     sim.add_clock(1 / 100e6)
     sim.add_sync_process(proc)
@@ -224,14 +230,19 @@ def sim_peripheral(m, verbose):
 #
 
 def test(verbose):
-    init = to_packet([ 0x12, 0x23, 0x34, 0x45 ])
-    dut = SpiController(width=8, init=init)
-    sim_controller(dut, init, verbose)
+    dut = SpiController(width=8)
+    sim_controller(dut, verbose)
 
     dut = SpiController(width=8, last_cs=True)
     sim_flags(dut, verbose)
 
     dut = SpiPeripheral(width=8, last_cs=True)
     sim_peripheral(dut, verbose)
+
+#
+#
+
+if __name__ == "__main__":
+    test(True)
 
 #   FIN
