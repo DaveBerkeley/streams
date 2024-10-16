@@ -12,7 +12,7 @@ class WS2812(Elaboratable):
     def __init__(self, read_port, N):
         # bit period ~ 1.2us, enable clock 3 * this
         self.port = read_port # 24-bit wide memory
-        self.phase_ck = Signal() # input clock at ~ 2.5MHz
+        self.phase_ck = Signal() # input clock at 3* bit period
         self.start = Signal() # begin tx
 
         self.o = Signal()
@@ -105,7 +105,7 @@ class WS2812(Elaboratable):
 
 class LedStream(Elaboratable):
 
-    def __init__(self, N, sys_ck=None):
+    def __init__(self, N, sys_ck=None, device="ws2812"):
         self.addr = Signal(range(N))
         width = self.addr.shape().width
         
@@ -114,9 +114,17 @@ class LedStream(Elaboratable):
         self.phase_ck = Signal()
         self.sys_ck = sys_ck
 
+        # ck div is 3* the bit period
+        if device == "ws2812":
+            t = 425e-9 + 825e-9
+            ck_div = 3 / t
+        elif device == "yf923":
+            t = 300e-9 + 600e-9
+            ck_div = 3 / t
+
         if sys_ck:
             # drive phase_ck
-            div = int(sys_ck / 2.5e6) + 1
+            div = int(sys_ck / ck_div) + 1
             self.ck_max = div - 1
             self.clock_counter = Signal(range(div))
 
@@ -182,9 +190,9 @@ class LedStream(Elaboratable):
 
 class LedStreamAdapter(Elaboratable):
 
-    def __init__(self, N, sys_ck=None):
+    def __init__(self, N, sys_ck=None, device="ws2812"):
         self.i = Stream(layout=[("data", 32)], name="in")
-        self.leds = LedStream(N, sys_ck)
+        self.leds = LedStream(N, sys_ck, device=device)
         self.o = Signal()
 
     def elaborate(self, platform):
