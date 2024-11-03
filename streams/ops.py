@@ -173,7 +173,7 @@ class Max(BinaryOp):
 
 class UnaryOp(Elaboratable):
 
-    def __init__(self, layout, name=None, fields=[]):
+    def __init__(self, layout, name=None, fields=[], **kwargs):
         if name:
             self.name = name
         self.i = Stream(layout=layout, name="i")
@@ -317,6 +317,7 @@ class Enumerate(UnaryOp):
             kwargs["name"] = name
         super().__init__(**kwargs)
         assert len(idx) == 1, idx
+        self.step = Const(kwargs.get('step', 1))
         self.idx_name, w = idx[0]
         self.offset = Const(offset)
         layout = self.i.get_layout()
@@ -330,7 +331,7 @@ class Enumerate(UnaryOp):
         m.d.sync += [
             so.eq(si),
             s.eq(self.idx + self.offset),
-            self.idx.eq(self.idx + 1),
+            self.idx.eq(self.idx + self.step),
         ]
 
         with m.If(self.i.last):
