@@ -115,12 +115,15 @@ class LedStream(Elaboratable):
         self.sys_ck = sys_ck
 
         # ck div is 3* the bit period
+        self.device = device
         if device == "ws2812":
             t = 425e-9 + 825e-9
             ck_div = 3 / t
         elif device == "yf923":
             t = 300e-9 + 600e-9
             ck_div = 3 / t
+        else:
+            assert 0, (device, "Unknown Device")
 
         if sys_ck:
             # drive phase_ck
@@ -174,11 +177,14 @@ class LedStream(Elaboratable):
                 self.mem.wr.addr.eq(self.i.addr),
                 self.mem.wr.data.eq(Cat(self.i.b, self.i.r, self.i.g)),
                 self.mem.wr.en.eq(1),
-
                 self.ws2812.start.eq(1),
-
                 self.i.ready.eq(0),
             ]
+            if self.device == "yf923":
+                m.d.sync += [
+                    # R & G are swapped
+                    self.mem.wr.data.eq(Cat(self.i.b, self.i.g, self.i.r)),
+                ]
 
         with m.If(~self.i.ready):
             m.d.sync += self.i.ready.eq(1)
@@ -201,16 +207,15 @@ class LedStreamAdapter(Elaboratable):
 
         m.d.comb += self.o.eq(self.leds.o)
 
-        def fn(name, src, sink):
-            assert sink is self.leds.i.addr
-            return [
-                self.leds.i.addr.eq(src >> 24),
-                self.leds.i.r.eq(src >> 16),
-                self.leds.i.g.eq(src >> 8),
-                self.leds.i.b.eq(src),
+        with m.If(self.i.valid & self.i.ready):
+            m.d.sync += [
+                self.leds.i.addr.eq(self.i.data >> 24),
+                self.leds.i.r.eq(self.i.data >> 16),
+                self.leds.i.g.eq(self.i.data >> 8),
+                self.leds.i.b.eq(self.i.data),
             ]
 
-        m.d.comb += Stream.connect(self.i, self.leds.i, mapping={"data":"addr"}, fn={"data":fn})
+        m.d.comb += Stream.connect(self.i, self.leds.i, exclude=["data"])
 
         return m
 
