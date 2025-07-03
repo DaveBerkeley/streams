@@ -1,6 +1,9 @@
 
 from amaranth import *
 
+import amaranth
+from packaging.version import Version
+
 from streams.stream import Stream
 
 #
@@ -31,23 +34,48 @@ class Port(Elaboratable):
 #
 #
 
-class DualPortMemory(Elaboratable):
-    
-    def __init__(self, width=16, depth=1024):
+if Version(amaranth.__version__) >= Version("0.6.0.dev90"):
 
-        self.ram = Memory(width=width, depth=depth)
-        port = self.ram.read_port(transparent=False)
-        self.rd = Port(port, rd=True)
-        port = self.ram.write_port()
-        self.wr = Port(port, rd=False)
+    from amaranth.lib.memory import Memory
 
-    def elaborate(self, platform):
-        m = Module()
-        m.submodules += [ self.ram, self.rd, self.wr ]
-        return m
+    class DualPortMemory(Elaboratable):
+        
+        def __init__(self, width=16, depth=1024):
 
-    def __getitem__(self, idx):
-        return self.ram._array[idx]
+            self.ram = Memory(shape=unsigned(width), depth=depth, init=[])
+            port = self.ram.read_port()
+            self.rd = Port(port, rd=True)
+            port = self.ram.write_port()
+            self.wr = Port(port, rd=False)
+
+        def elaborate(self, platform):
+            m = Module()
+            m.submodules += [ self.ram, self.rd, self.wr ]
+            return m
+
+        def __getitem__(self, idx):
+            return self.ram._data[idx]
+
+
+else:
+
+    class DualPortMemory(Elaboratable):
+        
+        def __init__(self, width=16, depth=1024):
+
+            self.ram = Memory(shape=unsigned(width), depth=depth, init=[])
+            port = self.ram.read_port(transparent=False)
+            self.rd = Port(port, rd=True)
+            port = self.ram.write_port()
+            self.wr = Port(port, rd=False)
+
+        def elaborate(self, platform):
+            m = Module()
+            m.submodules += [ self.ram, self.rd, self.wr ]
+            return m
+
+        def __getitem__(self, idx):
+            return self.ram._array[idx]
 
 #
 #
