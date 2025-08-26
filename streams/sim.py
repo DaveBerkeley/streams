@@ -37,9 +37,11 @@ class MonitorSim:
 #   Test Class, acts as Sink
 
 class SinkSim(MonitorSim):
-    def __init__(self, stream, name="SinkSim", read_data=True):
+    def __init__(self, stream, name="SinkSim", read_data=True, slow=0):
         MonitorSim.__init__(self, stream, name=name)
         self.read_data = read_data
+        self.slow = slow
+        self.wait = 0
 
     def reset(self):
         MonitorSim.reset(self)
@@ -51,8 +53,13 @@ class SinkSim(MonitorSim):
         v = yield self.m.valid
         if r and v:
             yield self.m.ready.eq(0)
+            self.wait = self.slow
         elif not r:
             if self.read_data:
+                if self.slow:
+                    if self.wait:
+                        self.wait -= 1
+                        return
                 yield self.m.ready.eq(1)
 
 #
