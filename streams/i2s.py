@@ -20,7 +20,8 @@ class Phy:
 
 class I2STxClock(Elaboratable):
 
-    def __init__(self, width):
+    def __init__(self, width, name="I2STxClock"):
+        self.name = name
         self.width = width
 
         # Input clock (pulses at twice the bit rate)
