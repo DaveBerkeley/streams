@@ -61,7 +61,7 @@ class Cluster:
                         name = f"{fn[name].__name__}({name})"
                     names.append(name)
                 if not names:
-                    return "[]"
+                    return ""
                 return ",".join(names)
             return "xxx"
         for source, sink, s, exclude, fn in Stream.connections:
