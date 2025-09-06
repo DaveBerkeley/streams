@@ -1,3 +1,4 @@
+#!/bin/env python
 
 import sys
 
@@ -8,7 +9,7 @@ from amaranth import *
 from amaranth.sim import *
 
 from streams.sim import SinkSim, SourceSim
-from streams.i2s import I2SOutput, I2SInput, I2STxClock
+from streams.i2s import I2SOutput, I2SInput, I2STxClock, I2SRxClock
 
 #
 #
@@ -51,7 +52,7 @@ def sim_o(m, verbose):
         yield from tick(5000)
 
     sim.add_clock(1 / 100e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     with sim.write_vcd("gtk/i2s.vcd", traces=m.ports()):
         sim.run()
 
@@ -125,15 +126,15 @@ def sim_i(m, verbose):
         assert data == r, r
 
     sim.add_clock(1 / 100e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     with sim.write_vcd("gtk/i2s_i.vcd", traces=m.ports()):
         sim.run()
 
 #
 #
 
-def sim_ck(m, verbose):
-    print("test i2s clock")
+def sim_tx_ck(m, verbose):
+    print("test i2s tx clock")
 
     sim = Simulator(m)
 
@@ -154,8 +155,48 @@ def sim_ck(m, verbose):
         yield from tick(5000)
 
     sim.add_clock(1 / 100e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     with sim.write_vcd("gtk/i2s_ck.vcd", traces=m.ports()):
+        sim.run()
+
+#
+#
+
+def sim_rx_ck(m, verbose):
+    print("test i2s 32-bit rx clock")
+
+    sim = Simulator(m)
+
+    info = {
+        "t" : 0,
+        "bit" : 0,
+    }
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            info['t'] += 1
+            if (info['t'] % 8) == 0:
+                # half clock cycle
+                sck = yield m.sck
+                yield m.sck.eq(~m.sck)
+                if sck: # 1 to 0 ck transition
+                    info['bit'] += 1
+                    if info['bit'] == 32:
+                        yield m.ws.eq(1)
+                    if info['bit'] == 64:
+                        info['bit'] = 0
+                        yield m.ws.eq(0)
+
+    def proc():
+        # simulate ws and sck input signals
+        yield from tick(5000)
+
+
+    sim.add_clock(1 / 100e6)
+    sim.add_process(proc)
+    with sim.write_vcd("gtk/i2s_rx_ck.vcd", traces=[]):
         sim.run()
 
 #
@@ -169,7 +210,10 @@ def test(verbose):
     sim_i(dut, verbose)
 
     dut = I2STxClock(24)
-    sim_ck(dut, verbose)
+    sim_tx_ck(dut, verbose)
+
+    dut = I2SRxClock(32)
+    sim_rx_ck(dut, verbose)
 
     print("done")
 

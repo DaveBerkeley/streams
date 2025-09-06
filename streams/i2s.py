@@ -143,6 +143,9 @@ class I2SRxClock(Elaboratable):
         self.sample_rx = Signal()  # read the data in line
         self.word = Signal()    # word complete, shift_in data is valid
 
+        # output can be used to derive Tx clock signals
+        self.ck2 = Signal()
+
     def elaborate(self, platform):
         m = Module()
         sck_0 = Signal()
@@ -152,6 +155,7 @@ class I2SRxClock(Elaboratable):
 
         # Sample on the rising edge of SCK
         m.d.comb += self.sample_rx.eq(sck_0 & ~sck_1)
+        m.d.comb += self.ck2.eq(sck_0 ^ sck_1)
         m.d.comb += self.word.eq(self.sample_rx & (self.bit == 0))
 
         ws_0 = Signal()
