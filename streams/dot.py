@@ -5,6 +5,16 @@ from .stream import Stream
 #
 #
 
+def draw(a, b):
+    # Use dot to draw a connection between 2 streams
+    # but don't actually connect them
+    s = a.get_layout(flags=True) + [ ("valid",1), ("ready",1) ]
+    exclude = [ x[0] for x in s ]
+    return Stream.connect(a, b, exclude=exclude)
+
+#
+#
+
 class Cluster:
 
     @staticmethod
