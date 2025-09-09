@@ -9,7 +9,62 @@ sys.path.append(".")
 sys.path.append("streams/streams")
 
 from streams.sim import SinkSim, SourceSim
-from streams.monitor import MonitorText
+from streams.monitor import MonitorText, Tap
+
+#
+#
+
+def sim_tap(m):
+    print("test tap")
+    sim = Simulator(m)
+
+    source = SourceSim(m.i)
+    sink = SinkSim(m.o)
+    osink = SinkSim(m.i)
+
+    polls = [ source, sink, osink ]
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            for s in polls:
+                yield from s.poll()
+
+    def proc():
+
+        def wait_sources(ss):
+            loop = True
+            while loop:
+                busy = False
+                for s in ss:
+                    if not s.done():
+                        busy = True
+                loop = busy
+                yield from tick(1)
+
+        packets = [
+            [ 10, { "abc": 0x100, "data" : 0x22, "test" : 0 } ],
+            [ 20, { "abc": 0x12345678, "data" : 0x13, "test" : 0x234 } ],
+        ]
+
+        for t, x in packets:
+            source.push(t, **x)
+
+        yield from tick(1)
+        yield from wait_sources([ source ])
+        yield from tick(100)
+
+        for name in [ "abc", "data", "test" ]:
+            d = sink.get_data(name)[0]
+            p = [ x[name] for _,x in packets ]
+            print(name, d, p)
+            assert d == p, (name, d, p)
+
+    sim.add_clock(1 / 50e6)
+    sim.add_process(proc)
+    with sim.write_vcd("gtk/tap.vcd", traces=[]):
+        sim.run()
 
 #
 #
@@ -77,6 +132,10 @@ def test(verbose):
     if test_all:
         dut = MonitorText(layout=[("abc", 32), ("data", 6), ("test", 12)])
         sim_monitor_text(dut)
+
+    if 0: # test_all: TODO!!!!
+        dut = Tap(layout=[("abc", 32), ("data", 6), ("test", 12)])
+        sim_tap(dut)
 
     from streams import dot
     dot_path = "/tmp/test.dot"
