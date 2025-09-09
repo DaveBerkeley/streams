@@ -384,11 +384,6 @@ class Sequencer(Elaboratable):
 #
 #
 
-#class Sequence(Collator):
-#
-#    def __init__(self, width, n, name="Sequence"):
-#        super().__init__(n, layout=[("data", width)], name=name)
-
 #
 #   Select input N, route to output
 #   waits for last data in packet to xfer before switching inputs
@@ -396,58 +391,65 @@ class Sequencer(Elaboratable):
 class Select(Elaboratable):
 
     def __init__(self, layout, n, sink=False, wait_last=True):
+        self.sink = sink
         self.wait_last = wait_last
-        self.mods = []
+        
         self.i = []
-        self.sinks = []
         for i in range(n):
-            name = f"i{i}"
-            s = Stream(layout=layout, name=name)
-            setattr(self, name, s)
+            label = f"i{i}"
+            s = Stream(layout=layout, name=label)
+            setattr(self, label, s)
             self.i.append(s)
-            if sink:
-                s = Sink(layout=layout)
-                self.mods.append(s)
-                name = f"sink{i}"
-                setattr(self, name, s)
-                self.sinks.append(s)
+
         self.o = Stream(layout=layout, name="o")
 
         self.select = Signal(range(n))
         self._select = Signal(range(n))
 
-    def elaborate(self, platform):
+        self.copying = Signal(n)
+        self.drop = Signal()
+
+    def elaborate(self, _):
         m = Module()
-        m.submodules += self.mods
 
-        last = Signal()
-        if self.wait_last:
-            m.d.comb += last.eq(self.o.last)
-        else:
-            m.d.comb += last.eq(1)
+        # Tx output
+        with m.If(self.o.valid & self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
 
-        with m.FSM(reset="IDLE"):
+        change = Signal()
+        m.d.comb += change.eq(self.select != self._select)
 
-            with m.State("IDLE"):
-                m.d.sync += self._select.eq(self.select)
-                m.d.comb += self.o.valid.eq(0)
-                for i, s in enumerate(self.i):
-                    m.d.comb += s.ready.eq(0)
-                    with m.If(self._select == i):
-                        with m.If(self.i[i].valid):
-                            m.next = "COPY"
+        m.d.sync += self.drop.eq(0)
 
-            with m.State("COPY"):
-                for i, s in enumerate(self.i):
-                    with m.If(i == self._select):
-                        m.d.comb += Stream.connect(s, self.o)
-                    with m.Else():
-                        if self.sinks:
-                            m.d.comb += Stream.connect(s, self.sinks[i].i)
-                        else:
-                            m.d.comb += s.ready.eq(0)
-                with m.If(self.o.valid & self.o.ready & last):
-                    m.next = "IDLE"
+        for i, s in enumerate(self.i):
+
+            with m.If(self._select == i):
+                with m.If((~self.o.valid) & ~s.ready):
+                    m.d.sync += [
+                        s.ready.eq(1),
+                    ]
+                # Read from the active input
+                with m.If(s.valid & s.ready):
+                    m.d.sync += [
+                        s.ready.eq(0),
+                        self.o.valid.eq(1),
+                        self.copying[i].eq(self.wait_last & ~s.last),
+                    ]   + self.o.payload_eq(s.cat_payload(flags=True), flags=True)
+            with m.Else():
+                m.d.sync += s.ready.eq(0)
+                if self.sink:
+                    # drop the input
+                    m.d.sync += s.ready.eq(self.copying[i] | ~change)
+                with m.If(s.valid & s.ready):
+                    m.d.sync += self.copying[i].eq(self.wait_last & ~s.last)
+                    m.d.sync += s.ready.eq(0)
+                    m.d.sync += self.drop.eq(1)
+
+            with m.If(change & (~self.copying.any() & ~(s.valid & s.ready))):
+                m.d.sync += [
+                    self._select.eq(self.select),
+                    s.ready.eq(0),
+                ]
 
         return m
 

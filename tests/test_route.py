@@ -14,6 +14,9 @@ from streams.sim import SinkSim, SourceSim
 
 from streams.route import Head, Router, StreamSync, Packetiser, Event, Sequencer, Select, Collator, MuxDown, MuxUp
 
+#
+#
+
 def sim_head(m, n):
     print("test head")
     sim = Simulator(m)
@@ -427,7 +430,7 @@ def sim_seq(m):
 #
 #
 
-def sim_select(m, with_sink):
+def sim_select(m, with_sink, ignore_packets=False):
     print("test select", ["", "sink"][with_sink])
     sim = Simulator(m)
 
@@ -443,6 +446,10 @@ def sim_select(m, with_sink):
             yield from sink.poll()
             for s in src:
                 yield from s.poll()
+            if ignore_packets:
+                for s in src:
+                    yield s.m.first.eq(1)
+                    yield s.m.last.eq(1)
 
     def proc():
 
@@ -457,24 +464,22 @@ def sim_select(m, with_sink):
         def start():
             sink.reset()
             for idx, t, packet in packets:
-                src[idx].reset()
                 for i, data in enumerate(packet):
-                    src[idx].push(t, data=data, first=i==0, last=i==(len(packet)-1))
-    
-        def run():    
-            yield m.select.eq(0)
-            yield from tick(5)
-            yield m.select.eq(1)
-            yield from tick(25)
-            yield m.select.eq(0)
-            yield from tick(5)
-            yield m.select.eq(2)
-            yield from tick(25)
-            yield m.select.eq(0)
-            yield from tick(20)
+                    first = i==0
+                    last = i==(len(packet)-1)
+                    src[idx].push(t, data=data, first=first, last=last)
+ 
+        chans = [ 0, 1,  0, 2,  0 ]
+        ticks = [ 4, 25, 5, 25, 20 ]
+
+        def run():
+            for i, t in enumerate(ticks):
+                yield m.select.eq(chans[i])
+                yield from tick(t)
 
         start()
         yield from run()
+        yield from tick(10)
 
         r = []
         if with_sink:
@@ -485,9 +490,24 @@ def sim_select(m, with_sink):
                 r.append(packets[i][2])
 
         d = sink.get_data("data")
+        #print(d)
+        #print(r)
+
+        if ignore_packets:
+            # flatten d
+            d = [ x[0] for x in d ] 
+            while d:
+                for i, x in enumerate(r):
+                    if len(x) and (d[0] == x[0]):
+                        #print("match", i, d[0], r)
+                        d = d[1:]
+                        r[i] = r[i][1:]
+            for x in r:
+                assert len(x) == 0
+            print("pass")
+            return
+
         assert r == d, (with_sink, r, d)
-
-
         print("pass")
 
     sim.add_clock(1 / 50e6)
@@ -896,6 +916,7 @@ def test(verbose):
         name = args[1]
         test_all = False
     else:
+        name = ""
         test_all = True
 
     if test_all or (name=="Head"):
@@ -928,12 +949,16 @@ def test(verbose):
         dut = Sequencer()
         sim_seq(dut)
 
-    if test_all:
+    if (name=="Select") or test_all:
         layout = [("data", 16)]
-        dut = Select(layout=layout, n=4, sink=True)
-        sim_select(dut, with_sink=True)
         dut = Select(layout=layout, n=4, sink=False)
         sim_select(dut, with_sink=False)
+
+        dut = Select(layout=layout, n=4, sink=True)
+        sim_select(dut, with_sink=True)
+
+        dut = Select(layout=layout, n=4, sink=False)
+        sim_select(dut, with_sink=False, ignore_packets=True)
 
     if test_all:
         dut = Arbiter(n=3, layout=[("data", 16)])
