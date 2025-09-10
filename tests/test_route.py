@@ -41,6 +41,7 @@ def sim_head(m, n):
             [ 40, [ 16, 4, 5, 6, 7, 8 ], ],
             [ 80, [ 32, 2, 123, 345, ], ],
             [ 100, [ 32, 2, ], ],
+            [ 100, [ 123, ], ],
             [ 100, [ 1, 2, 3, 4, ], ],
         ]
 
@@ -50,28 +51,37 @@ def sim_head(m, n):
             for i, data in enumerate(packet):
                 src.push(t, data=data, first=(i==0), last=(i == (len(packet)-1)))
 
+        def check_head(packet):
+            v = yield m.valid
+            if not v: return
+
+            # check the 'head' data is correct
+
+            h = []
+            for i, d in enumerate(packet):
+                if i >= n:
+                    break
+                x = yield m.head[i]
+                h.append(x)
+
+            #print(h, packet)
+            assert h == packet[:len(h)], (h, packet)
+
         def wait_packet(packet):
             while True:
+
+                # wait for the end of the packet
+                r = yield m.i.ready
+                v = yield m.i.valid
+                l = yield m.i.last
+
                 yield from tick(1)
+                yield from check_head(packet)
 
-                v = yield m.valid
-                if v:
-                    # check the 'head' data is correct
-                    for i in range(n):
-                        h = yield m.head[i]
-                        assert h == packet[i], (i, h, packet)
-
-                r = yield m.o.ready
-                v = yield m.o.valid
-                l = yield m.o.last
-                # end of packet
                 if r and v and l:
                     break
-            yield from tick(1)
 
-        for t,packet in packets:
-            if len(packet) <= 3:
-                continue
+        for _,packet in packets:
             yield from wait_packet(packet)
 
         yield from tick(10)

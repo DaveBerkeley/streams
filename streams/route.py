@@ -28,18 +28,26 @@ class Head(Elaboratable):
         self.name = f"Head[{n}]"
         self.field = data_field
         size = get_field(data_field, layout)
+
         self.i = Stream(layout, name="i")
         self.o = Stream(layout, name="o")
+        # set hi when head[x] all loaded
+        self.valid = Signal()
+        # set hi when Head has more data to output to .o
+        self.more = Signal()
+
         self.head = Array([ Signal(size) for i in range(n) ])
         self.field = getattr(self.i, self.field)
 
         self.end = Const(n-1)
         self.idx = Signal(range(n+1))
-        self.valid = Signal()
+        self.copied = Signal()
         self.first = Signal()
 
     def elaborate(self, platform):
         m = Module()
+
+        m.d.comb += self.more.eq(self.copied)
 
         # Tx output
         with m.If(self.o.valid & self.o.ready):
@@ -48,11 +56,10 @@ class Head(Elaboratable):
         # Ready for more input
         with m.If((~self.i.ready) & ~self.o.valid):
             m.d.sync += self.i.ready.eq(1)
+            m.d.sync += self.valid.eq(0)
 
         def tx(first):
             m.d.sync += [
-                #self.valid.eq(~self.i.last),
-
                 self.o.valid.eq(1),
                 self.o.first.eq(first),
                 self.o.last.eq(self.i.last),
@@ -61,14 +68,18 @@ class Head(Elaboratable):
                 m.d.sync += self.idx.eq(0)
 
         with m.If(self.o.valid & self.o.last):
-            m.d.sync += self.valid.eq(0)
+            m.d.sync += self.copied.eq(0)
 
         # Process input
         with m.If(self.i.ready & self.i.valid):
             m.d.sync += [
                 self.i.ready.eq(0),
             ]
-            with m.If(~self.valid):
+
+            with m.If(self.valid & self.i.first):
+                m.d.sync += self.valid.eq(0)
+
+            with m.If(~self.copied):
                 m.d.sync += [
                     self.idx.eq(self.idx + 1),
                     self.head[self.idx].eq(self.field),
@@ -82,12 +93,14 @@ class Head(Elaboratable):
 
                 with m.If(self.i.last):
                     m.d.sync += self.idx.eq(0)
+                    m.d.sync += self.valid.eq(1)
 
                 with m.If(self.idx == self.end):
                     with m.If(~self.i.last):
                         m.d.sync += [
-                            self.valid.eq(1),
+                            self.copied.eq(1),
                             self.first.eq(1),
+                            self.valid.eq(1)
                         ]
 
             with m.Else():
@@ -153,16 +166,16 @@ class Router(Elaboratable):
                 m.d.comb += Stream.connect(self.null, s, exclude=["ready"])
 
         for idx, addr in enumerate(self.addrs):
-            connect(self.o[addr], self.route_mask[idx] & self.head.valid)
+            connect(self.o[addr], self.route_mask[idx] & self.head.more)
 
-        connect(self.e, self.error & self.head.valid)
+        connect(self.e, self.error & self.head.more)
 
         # the 'ready' signal back is the OR of each gated output+error
 
         for idx, addr in enumerate(self.addrs):
             s = self.o[addr]
             m.d.comb += self.ready[idx].eq(self.route_mask[idx] & s.ready)
-        m.d.comb += self.ready[-1].eq(self.error & self.e.ready & self.head.valid)
+        m.d.comb += self.ready[-1].eq(self.error & self.e.ready & self.head.more)
 
         m.d.comb += o.ready.eq(self.ready.any())
 
@@ -170,7 +183,7 @@ class Router(Elaboratable):
             with m.State("IDLE"):
                 m.d.sync += self.route_mask.eq(0)
                 m.d.sync += self.error.eq(0)
-                with m.If(self.head.valid):
+                with m.If(self.head.more):
                     m.d.sync += self.error.eq(1)
                     for idx, addr in enumerate(self.addrs):
                         with m.If(addr == self.head.head[0]):
