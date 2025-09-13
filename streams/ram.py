@@ -40,8 +40,8 @@ if Version(amaranth.__version__) >= Version("0.6.0.dev90"):
 
     class DualPortMemory(Elaboratable):
         
-        def __init__(self, width=16, depth=1024):
-
+        def __init__(self, width=16, depth=1024, name="DualPortMemory"):
+            self.name = name
             self.ram = Memory(shape=unsigned(width), depth=depth, init=[])
             port = self.ram.read_port()
             self.rd = Port(port, rd=True)
@@ -265,6 +265,65 @@ class RamReader(Elaboratable):
 
         with m.If(self.o.valid & self.o.ready):
             m.d.sync += self.o.valid.eq(0)
+
+        return m
+
+#
+#   Alternative Stream to RAM :
+#
+#   takes an input packet { addr, data ... }
+#
+#   so the first word is the start address, followed by data to write
+
+class WriteRam(Elaboratable):
+
+    """
+    Stream of input data in the form { addr, data0, data1, data2 .. }
+    writes the data0 at addr, then increments the addr for the next data.
+    """
+
+    def __init__(self, width=16, depth=8, mem=None):
+        self.mods = []
+
+        if mem is None:
+            mem = DualPortMemory(width=width, depth=depth)
+            self.mods += [ mem ]
+
+        self.mem = mem
+
+        self.i = Stream(layout=[("data", width)], name="i")
+
+        self.addr = Signal(range(depth))
+
+    def elaborate(self, platform):
+        m = Module()
+        m.submodules += self.mods
+
+        port = self.mem.wr
+
+        with m.If(port.en):
+            m.d.sync += [
+                port.en.eq(0),
+                self.addr.eq(self.addr + 1),
+            ]
+
+        with m.If(~self.i.ready):
+            m.d.sync += self.i.ready.eq(1)
+
+        with m.If(self.i.ready & self.i.valid):
+
+            m.d.sync += self.i.ready.eq(0)
+ 
+            with m.If(self.i.first):
+                m.d.sync += self.addr.eq(self.i.data)
+
+            with m.Else():
+                m.d.sync += [
+                    self.i.ready.eq(0),
+                    port.en.eq(1),
+                    port.data.eq(self.i.data),
+                    port.addr.eq(self.addr),
+                ]
 
         return m
 
