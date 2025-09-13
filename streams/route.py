@@ -24,13 +24,17 @@ class Head(Elaboratable):
     a control Stream.
     """
 
-    def __init__(self, layout, data_field, n=1):
+    def __init__(self, layout, data_field, n=1, sink=False):
         self.name = f"Head[{n}]"
         self.field = data_field
         size = get_field(data_field, layout)
 
         self.i = Stream(layout, name="i")
         self.o = Stream(layout, name="o")
+
+        if sink:
+            self.sink = Sink(layout, name="sink")
+
         # set hi when head[x] all loaded
         self.valid = Signal()
         # set hi when Head has more data to output to .o
@@ -46,6 +50,9 @@ class Head(Elaboratable):
 
     def elaborate(self, platform):
         m = Module()
+        if hasattr(self, "sink"):
+            m.submodules += self.sink
+            m.d.comb += Stream.connect(self.o, self.sink.i)
 
         m.d.comb += self.more.eq(self.copied)
 
