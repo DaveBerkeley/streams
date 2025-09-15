@@ -87,7 +87,7 @@ def sim_head(m, n):
         yield from tick(10)
 
         d = sink.get_data("data")
-        print(d)
+        #print(d)
         idx = 0
         for i, (t, p) in enumerate(packets):
             if len(p) > 3:
