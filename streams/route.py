@@ -129,7 +129,7 @@ class Router(Elaboratable):
     typically require a Sink on it.
     """
 
-    def __init__(self, layout, addr_field, addrs=[], name="Router"):
+    def __init__(self, layout, addr_field, addrs=[], name="Router", sink=None):
         self.name = name
         assert len(addrs)
         get_field(addr_field, layout) # assert
@@ -146,6 +146,12 @@ class Router(Elaboratable):
 
         self.head = Head(layout, data_field=addr_field)
         self.mods += [ self.head ]
+
+        if sink is True:
+            self.sink = Sink(layout=layout)
+            self.mods += [ self.sink ]
+        elif isinstance(sink, list):
+            sink.append(self.e)
 
         self.o = {}
 
@@ -185,6 +191,9 @@ class Router(Elaboratable):
         m.d.comb += self.ready[-1].eq(self.error & self.e.ready & self.head.more)
 
         m.d.comb += o.ready.eq(self.ready.any())
+
+        if hasattr(self, "sink"):
+            m.d.comb += Stream.connect(self.e, self.sink.i)
 
         with m.FSM():
             with m.State("IDLE"):
