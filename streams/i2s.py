@@ -81,7 +81,8 @@ class I2SOutput(Elaboratable):
         self.tx = tx_clock
         layout = [ ("left", width), ("right", width) ]
         self.i = Stream(layout=layout, name=f"i{width}")
-        self.enable = Signal()
+        if not tx_clock:
+            self.enable = Signal()
 
         self.phy = Phy()
         self.sro = Signal(width * 2)
