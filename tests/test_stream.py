@@ -66,7 +66,7 @@ def sim_init(m, init_data, verbose):
         assert d[2] == get_field(init_data), (d[2], init_data)
 
     sim.add_clock(1 / 100e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     with sim.write_vcd("gtk/stream_init.vcd", traces=m.ports()):
         sim.run()
 
@@ -105,7 +105,7 @@ def sim_null(m, n, verbose):
         assert tx_data[n:], get_field("data", sink.data[0])
 
     sim.add_clock(1 / 100e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     with sim.write_vcd("gtk/stream_null.vcd", traces=m.ports()):
         sim.run()
 
@@ -166,7 +166,7 @@ def sim_tee(m, verbose):
                 assert p != tx_p, (i, p, tx_p)
 
     sim.add_clock(1 / 100e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     wait = m.wait_all
     with sim.write_vcd(f"gtk/stream_tee_{wait}.vcd", traces=m.ports()):
         sim.run()
@@ -227,7 +227,7 @@ def sim_join(m, verbose):
             assert p == (a_data[i][1], b_data[i][1])
 
     sim.add_clock(1 / 100e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     with sim.write_vcd(f"gtk/stream_join.vcd", traces=[]):
         sim.run()
 
@@ -280,7 +280,7 @@ def sim_split(m, verbose):
         print("TODO")
 
     sim.add_clock(1 / 100e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     with sim.write_vcd(f"gtk/stream_join.vcd", traces=[]):
         sim.run()
 
@@ -361,7 +361,7 @@ def sim_gate(m, verbose):
             check(i, t, d)
 
     sim.add_clock(1 / 100e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     with sim.write_vcd(f"gtk/stream_gate.vcd", traces=[]):
         sim.run()
 
@@ -444,7 +444,7 @@ def sim_arbiter(m, verbose):
         assert len(d) == 0
 
     sim.add_clock(1 / 100e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     with sim.write_vcd(f"gtk/stream_arb.vcd", traces=[]):
         sim.run()
 
@@ -452,32 +452,43 @@ def sim_arbiter(m, verbose):
 #
 
 def test(verbose=False):
-    from streams.sim import SinkSim, SourceSim
+    if len(sys.argv) > 1:
+        test_all, name = False, sys.argv[1]
+    else:
+        test_all, name = True, None
 
     layout = [ ( "data", 16 ), ]
-    data = to_packet([ 0xabcd, 0xffff, 0xaaaa, 0x0000, 0x5555 ])
-    dut = StreamInit(data, layout)
-    sim_init(dut, data, verbose)
 
-    dut = StreamNull(3, layout)
-    sim_null(dut, 3, verbose)
+    if (name == "StreamInit") or test_all:
+        data = to_packet([ 0xabcd, 0xffff, 0xaaaa, 0x0000, 0x5555 ])
+        dut = StreamInit(data, layout)
+        sim_init(dut, data, verbose)
 
-    dut = Tee(3, layout, wait_all=False)
-    sim_tee(dut, verbose)
-    dut = Tee(3, layout, wait_all=True)
-    sim_tee(dut, verbose)
+    if (name == "StreamNull") or test_all:
+        dut = StreamNull(3, layout)
+        sim_null(dut, 3, verbose)
 
-    dut = Join(a=[("a", 8)], b=[("b", 8)])
-    sim_join(dut, verbose)
+    if (name == "Tee") or test_all:
+        dut = Tee(3, layout, wait_all=False)
+        sim_tee(dut, verbose)
+        dut = Tee(3, layout, wait_all=True)
+        sim_tee(dut, verbose)
 
-    dut = Split(layout=[("a", 12), ("b", 8), ("c", 8)])
-    sim_split(dut, verbose)
+    if (name == "Join") or test_all:
+        dut = Join(a=[("a", 8)], b=[("b", 8)])
+        sim_join(dut, verbose)
 
-    dut = GatePacket(layout=[("data", 16)])
-    sim_gate(dut, verbose)
+    if (name == "Split") or test_all:
+        dut = Split(layout=[("a", 12), ("b", 8), ("c", 8)])
+        sim_split(dut, verbose)
 
-    dut = Arbiter(layout=[("data", 16)], n=3)
-    sim_arbiter(dut, verbose)
+    if (name == "GatePacket") or test_all:
+        dut = GatePacket(layout=[("data", 16)])
+        sim_gate(dut, verbose)
+
+    if (name == "Arbiter") or test_all:
+        dut = Arbiter(layout=[("data", 16)], n=3)
+        sim_arbiter(dut, verbose)
 
 #
 #

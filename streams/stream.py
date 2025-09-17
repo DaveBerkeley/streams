@@ -362,6 +362,9 @@ class Join(Elaboratable):
 
         self.o = Stream(layout=layouts, name=add_name(name, ','.join(self.fields)))
 
+    def __repr__(self):
+        return "Join(" + ",".join(self.fields) + ")"
+
     def elaborate(self, platform):
         m = Module()
 
@@ -512,101 +515,82 @@ class GatePacket(Elaboratable):
         return m
 
 #
-#   Temporary bodge because the old n-input Arbiter
-#   goes combinatorially crazy with any number of inputs over 4.
-#   So construct a tree of n-1 2-input Arbiters instead.
-
-class _Arbiter(Elaboratable):
-
-    def __init__(self, layout, n, name=None):
-        assert n == 2
-        self.i = []
-        for i in range(2):
-            label = f"i_{i}"
-            s = Stream(layout=layout, name=label)
-            self.i.append(s)
-            setattr(self, label, s)
-
-        self.o = Stream(layout=layout, name="o")
-
-        self.busy = Signal()
-
-    def elaborate(self, platform):
-        m = Module()
-
-        with m.If(self.o.ready & self.o.valid):
-            # send data
-            m.d.sync += [
-                self.o.valid.eq(0),
-                #self.busy.eq(0),
-            ]
-
-        m.d.comb += self.busy.eq(self.o.valid | self.i[0].ready | self.i[1].ready)
-
-        with m.If(~self.busy):
-            with m.If(self.i[0].valid):
-                m.d.sync += [
-                    self.i[0].ready.eq(1),
-                    #self.busy.eq(1),
-                ]
-            with m.Elif(self.i[1].valid):
-                m.d.sync += [
-                    self.i[1].ready.eq(1),
-                    #self.busy.eq(1),
-                ]
-
-        for i in range(2):
-            with m.If(self.i[i].valid & self.i[i].ready):
-                m.d.sync += [
-                    self.i[i].ready.eq(0),
-                    self.o.valid.eq(1),
-                    self.o.payload_eq(self.i[i].cat_payload(flags=True), flags=True)
-                ]
-
-        return m
+#
 
 class Arbiter(Elaboratable):
 
-    def __init__(self, layout, n, name=None):
-
+    def __init__(self, layout=[], n=None, name="Arbiter"):
+        self.name = name
         assert n > 1
         self.i = []
+        self.s = []
         for i in range(n):
-            label = f"i_{i}"
+            label = f"i{i}"
             s = Stream(layout=layout, name=label)
             self.i.append(s)
+            setattr(self, label, s)
+            label = f"s{i}"
+            s = Stream(layout=layout, name=label)
+            self.s.append(s)
             setattr(self, label, s)
 
         self.o = Stream(layout, "o")
 
-        self.mods = []
-        for i in range(n-1):
-            label = f"arb_{i}"
-            s = _Arbiter(layout, n=2, name=label)
-            s.name = label
-            self.mods.append(s)
-            setattr(self, label, s)
+        self.next = Signal(n)
+        self.chan = Signal(n)
+        self.avail = Signal(n)
 
     def elaborate(self, platform):
         m = Module()
-        m.submodules += self.mods
 
-        ins = self.i[:]
-        arbs = self.mods[:]
-        while len(arbs):
-            #print([ x.name for x in ins ], [ x.name for x in arbs ])
-            assert len(ins) >= 2
-            arb, arbs = arbs[0], arbs[1:]
-            i1, i2, ins = ins[0], ins[1], ins[2:]
-            #print("connect", i1.name, i2.name, arb.name)
-            m.d.comb += Stream.connect(i1, arb.i[0])
-            m.d.comb += Stream.connect(i2, arb.i[1])
-            ins.append(arb.o)
+        # Tx output
+        with m.If(self.o.valid & self.o.ready):
+            m.d.sync += self.o.valid.eq(0)
 
-        arb = ins[0]
-        #print("connect", arb.name, self.o.name)
-        m.d.comb += Stream.connect(arb, self.o)
-        
+        def copy(src, dst):
+            flags = True
+            m.d.sync += dst.valid.eq(1)
+            m.d.sync += dst.payload_eq(src.cat_payload(flags=flags), flags=flags)
+
+        # greedily read all the inputs
+        for idx, s in enumerate(self.i):
+            m.d.comb += self.i[idx].ready.eq(~self.s[idx].valid)
+
+            # copy input to the s layer
+            with m.If(s.ready & s.valid & ~self.s[idx].valid):
+                copy(s, self.s[idx])
+
+        m.d.comb += self.avail.eq(Cat( [ s.valid for s in self.s ]))
+
+        with m.If(self.chan == 0):
+            with m.If(self.next != 0):
+                # select this as the busy channel
+                m.d.sync += [
+                    self.chan.eq(self.next),
+                    self.next.eq(0),
+                ]
+            with m.Elif(self.avail != 0):
+                # (x & -x) selects the lowest bit
+                m.d.sync += self.chan.eq(self.avail & -self.avail)
+
+        with m.If(self.chan != 0):
+            # copying a channel to the output
+            with m.If(~self.o.valid):
+                for idx, s in enumerate(self.s):
+                    mask = 1 << idx
+                    with m.If(self.chan == mask):
+                        with m.If(s.valid):
+                            # copy this input to the output
+                            m.d.sync += s.valid.eq(0)
+                            copy(s, self.o)
+                            with m.If(s.last):
+                                m.d.sync += self.chan.eq(0)
+                    with m.Elif(self.avail & mask):
+                        # data is available on this channel
+                        # so queue it as the next channel
+                        with m.If(self.next == 0):
+                            m.d.sync += self.next.eq(mask)
+
         return m
 
 #   FIN
