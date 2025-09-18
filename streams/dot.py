@@ -126,11 +126,16 @@ def get_clusters(m, nest=1, d=None):
     return cluster
 
 def run(dot, png):
-    import subprocess
-    cmd = f"dot -T png {dot} -o {png}"
+    import subprocess, os
+    _, fmt = os.path.splitext(png)
+    fmt = fmt[1:] # strip leading '.'
+    cmd = f"dot -T {fmt} {dot} -o {png}"
     print("run", cmd)
-    subprocess.call(cmd, shell=True)
-    print("generated", png)
+    x = subprocess.call(cmd, shell=True)
+    if x == 0:
+        print("generated", png)
+    else:
+        print("error generating", png)
 
 def graph(m, d_path, p_path):
     f = open(d_path, "w")
