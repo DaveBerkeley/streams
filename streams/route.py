@@ -24,8 +24,8 @@ class Head(Elaboratable):
     a control Stream.
     """
 
-    def __init__(self, layout, data_field, n=1, sink=False):
-        self.name = f"Head[{n}]"
+    def __init__(self, layout, data_field, n=1, sink=False, name=None):
+        self.name = name or f"Head[{n}]"
         self.field = data_field
         size = get_field(data_field, layout)
 
