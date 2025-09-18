@@ -541,7 +541,13 @@ class Arbiter(Elaboratable):
         self.avail = Signal(n)
 
     def elaborate(self, platform):
+        from .dot import draw
+
         m = Module()
+
+        for i in range(len(self.i)):
+            draw(self.i[i], self.s[i])
+            draw(self.s[i], self.o)
 
         # Tx output
         with m.If(self.o.valid & self.o.ready):
