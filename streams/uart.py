@@ -4,17 +4,18 @@ from amaranth import *
 from streams import Stream
 
 #
-#   Simple 8-bit Tx Stream to UART
+#   Simple Tx Stream to UART
 
 class UART_Tx(Elaboratable):
 
-    def __init__(self):
-        self.i = Stream(layout=[("data", 8)], name="i")
+    def __init__(self, bits=8):
+        self.bits = bits
+        self.i = Stream(layout=[("data", bits)], name="i")
         self.o = Signal(reset=1)
         self.en = Signal() # baud rate enable signal
 
-        self.bit = Signal(range(8+1))
-        self.sr = Signal(8)
+        self.bit = Signal(range(bits))
+        self.sr = Signal(bits)
 
     def elaborate(self, platform):
         m = Module()
@@ -29,6 +30,7 @@ class UART_Tx(Elaboratable):
                     m.d.sync += [
                         self.i.ready.eq(0),
                         self.sr.eq(self.i.data),
+                        self.bit.eq(0),
                     ]
                     m.next = "START"
 
@@ -36,7 +38,6 @@ class UART_Tx(Elaboratable):
                 with m.If(self.en):
                     m.d.sync += [
                         self.o.eq(0), # Start Bit
-                        self.bit.eq(0),
                     ]
                     m.next = "TX"
 
@@ -47,7 +48,7 @@ class UART_Tx(Elaboratable):
                         self.sr.eq(self.sr >> 1),
                         self.bit.eq(self.bit + 1),
                     ]
-                    with m.If(self.bit == 7):
+                    with m.If(self.bit == (self.bits-1)):
                         m.next = "STOP"
 
             with m.State("STOP"):
