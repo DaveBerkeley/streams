@@ -203,17 +203,26 @@ def sim_rx_ck(m, verbose):
 #
 
 def test(verbose):
-    dut = I2SOutput(32)
-    sim_o(dut, verbose)
+    test_all, name = True, None
+    if len(sys.argv) > 1:
+        name = sys.argv[1]
+        test_all = False
 
-    dut = I2SInput(16)
-    sim_i(dut, verbose)
+    if (name == "I2SOutput") or test_all:
+        dut = I2SOutput(32)
+        sim_o(dut, verbose)
 
-    dut = I2STxClock(24)
-    sim_tx_ck(dut, verbose)
+    if (name == "I2SInput") or test_all:
+        dut = I2SInput(16)
+        sim_i(dut, verbose)
 
-    dut = I2SRxClock(32)
-    sim_rx_ck(dut, verbose)
+    if (name == "I2STxClock") or test_all:
+        dut = I2STxClock(24)
+        sim_tx_ck(dut, verbose)
+
+    if (name == "I2SRxClock") or test_all:
+        dut = I2SRxClock(32)
+        sim_rx_ck(dut, verbose)
 
     print("done")
 
