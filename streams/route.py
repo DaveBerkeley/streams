@@ -542,6 +542,50 @@ class Collator(Elaboratable):
         return m
 
 #
+#   Read in a Packet, Send the nth item to output o[n]
+
+class PacketSplit(Elaboratable):
+
+    def __init__(self, layout, n=None, name="PacketSplit"):
+        self.i = Stream(layout=layout, name="i")
+
+        self.o = []
+        for i in range(n):
+            label = f"o{i}"
+            s = Stream(layout=layout, name=label)
+            setattr(self, label, s)
+            self.o.append(s)
+
+        bits = sum([ x[1] for x in layout ])
+
+        head_layout = [("data", bits)]
+        self.head = Head(layout=[("data", bits)], data_field="data", n=n, sink=True) 
+
+    def elaborate(self, _):
+        m = Module()
+        m.submodules += self.head
+
+        fields = [ x[0] for x in self.i.get_layout() ] + [ "ready" ]
+        m.d.comb += Stream.connect(self.i, self.head.i, exclude=fields)
+        m.d.comb += self.head.i.data.eq(self.i.cat_payload())
+
+        # Tx all outputs
+        for i, s in enumerate(self.o):
+            with m.If(s.ready & s.valid):
+                m.d.sync += s.valid.eq(0)
+
+        valid = Cat([ s.valid for s in self.o ])
+
+        m.d.comb += self.i.ready.eq(self.head.i.ready & (~valid.any()) & ~self.head.valid)
+
+        with m.If(self.head.valid):
+            for i, s in enumerate(self.o):
+                m.d.sync += s.valid.eq(1)
+                m.d.sync += s.payload_eq(self.head.head[i])
+
+        return m
+
+#
 #
 
 class MuxDown(Elaboratable):

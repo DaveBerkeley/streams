@@ -12,7 +12,8 @@ sys.path.append("streams/streams")
 from streams.stream import Stream, to_packet
 from streams.sim import SinkSim, SourceSim
 
-from streams.route import Head, Router, StreamSync, Packetiser, Event, Sequencer, Select, Collator, MuxDown, MuxUp
+from streams.route import Head, Router, StreamSync, Packetiser, Event, Sequencer
+from streams.route import Select, Collator, MuxDown, MuxUp, PacketSplit
 
 #
 #
@@ -834,6 +835,77 @@ def sim_muxup(m, verbose):
 #
 #
 
+def sim_packetsplit(m, verbose):
+    print("test packetsplit")
+    sim = Simulator(m)
+
+    src = SourceSim(m.i, verbose=verbose)
+    sinks = []
+    for i, s in enumerate(m.o):
+        slow = 0
+        if i == 2:
+            slow = 20
+        sink = SinkSim(s, slow=slow)
+        sinks.append(sink)
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            yield from src.poll()
+            for sink in sinks:
+                yield from sink.poll()
+
+
+    def proc():
+
+        data = [
+            [ 10, [ 1, 2, 3, 4, 5 ], ],
+            [ 20, [ 0x11, 0x22, 0x33, 0x44, 0x55 ], ],
+            [ 30, [ 10, 20, 30, 40, 50 ], ],
+        ]
+
+        def to_packet(p):
+            r = []
+            for x in p:
+                r.append({ "a": x, "b" : x%2 })
+            return r
+
+        def load_packet(t, packet):
+            for i, data in enumerate(packet):
+                src.push(t, first=(i==0), last=(i == (len(packet)-1)), **data)
+
+        for i, (t, d) in enumerate(data):
+            p = to_packet(d)
+            load_packet(t, p)
+
+        yield from tick(5)
+
+        while True:
+            yield from tick(1)
+            if src.done():
+                break
+
+        yield from tick(20)
+
+        for idx, sink in enumerate(sinks):
+            p = [ a[idx] for t,a in data ]
+            a = sink.get_data("a")[0]
+            #print(p, a)
+            assert p == a, (p, a)
+            b = sink.get_data("b")[0]
+            #print(idx, a, b)
+            for x,y in zip(a, b):
+                assert (x%2) == y, (x, y)
+
+    sim.add_clock(1 / 100e6)
+    sim.add_process(proc)
+    with sim.write_vcd(f"gtk/packetsplit.vcd", traces=[]):
+        sim.run()
+
+#
+#
+
 def test(verbose):
     args = sys.argv
     if len(args) == 2:
@@ -899,6 +971,10 @@ def test(verbose):
     if test_all:
         dut = MuxUp(iwidth=8, owidth=16)
         sim_muxup(dut, True)
+
+    if (name == "PacketSplit") or test_all:
+        dut = PacketSplit(layout=[("a", 10), ("b", 1)], n=5)
+        sim_packetsplit(dut, True)
 
     from streams import dot
     dot_path = "/tmp/wifi.dot"
