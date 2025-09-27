@@ -8,7 +8,8 @@ from streams import Stream
 
 class UART_Tx(Elaboratable):
 
-    def __init__(self, bits=8):
+    def __init__(self, bits=8, name="UART_Tx"):
+        self.name = name
         self.bits = bits
         self.i = Stream(layout=[("data", bits)], name="i")
         self.o = Signal(reset=1)
