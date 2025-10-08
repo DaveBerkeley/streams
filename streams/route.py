@@ -32,7 +32,9 @@ class Head(Elaboratable):
         self.i = Stream(layout, name="i")
         self.o = Stream(layout, name="o")
 
-        if sink:
+        if type(sink) is list:
+            sink.append(self.o)
+        elif sink:
             self.sink = Sink(layout, name="sink")
 
         # set hi when head[x] all loaded
