@@ -113,6 +113,23 @@ class SK9822(Elaboratable):
         self.leds = Array( [  Signal((8 * 3) + 5) for i in range(nleds) ] )
         self.changed = Signal(reset=1)
 
+    def connect(self, src, dst=None):
+        # connect a "data" field to the addr,r,g,b fields
+        layout = src.get_layout()
+        assert len(layout) == 1, layout
+        assert layout[0][0] == "data", layout
+        assert layout[0][1] >= 32, layout
+        if dst is None:
+            dst = self.i
+        r = Stream.connect(src, dst, exclude=["data"])
+        r += [
+            dst.addr.eq(src.data >> 24),
+            dst.r.eq(src.data >> 16),
+            dst.g.eq(src.data >> 8),
+            dst.b.eq(src.data >> 0),
+        ]
+        return r
+
     def elaborate(self, platform):
         m = Module()
         m.submodules += self.tx
