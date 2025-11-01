@@ -20,9 +20,10 @@ class Phy:
 
 class I2STxClock(Elaboratable):
 
-    def __init__(self, width, name="I2STxClock"):
+    def __init__(self, width, owidth=None, name="I2STxClock"):
         self.name = name
         self.width = width
+        self.owidth = owidth
 
         # Input clock (pulses at twice the bit rate)
         self.enable = Signal()
@@ -38,6 +39,10 @@ class I2STxClock(Elaboratable):
         # Timing signals for Rx
         self.sample_rx = Signal()
         self.word = Signal()
+        if owidth:
+            # When used for Rx generation
+            self.l_word = Signal()
+            self.r_word = Signal()
 
     def elaborate(self, platform):
         m = Module()
@@ -55,6 +60,11 @@ class I2STxClock(Elaboratable):
             self.sample_rx.eq(self.enable & ~half),
             self.word.eq(self.sample_rx & (bit == 1)),
         ]
+        if self.owidth:
+            m.d.comb += [
+                self.l_word.eq(self.sample_rx & (bit == (1+self.owidth))),
+                self.r_word.eq(self.sample_rx & (bit == (1+self.width+self.owidth))),
+            ]
 
         with m.If(self.enable):
             m.d.sync += half.eq(~half)
@@ -68,8 +78,6 @@ class I2STxClock(Elaboratable):
                 ]
 
         return m
-
-    def ports(self): return []
 
 #
 #
@@ -124,15 +132,14 @@ class I2SOutput(Elaboratable):
 
         return m
 
-    def ports(self): return []
-
 #
 #   Read WS/SCK data and generate timing signals
 
 class I2SRxClock(Elaboratable):
 
-    def __init__(self, width):
+    def __init__(self, width, owidth=None):
         self.width = width
+        self.owidth = owidth
 
         # Inputs
         self.ws = Signal()
@@ -143,6 +150,10 @@ class I2SRxClock(Elaboratable):
         # outputs used by I2SRx units
         self.sample_rx = Signal()  # read the data in line
         self.word = Signal()    # word complete, shift_in data is valid
+
+        if owidth:
+            self.l_word = Signal()
+            self.r_word = Signal()
 
         # output can be used to derive Tx clock signals
         self.ck2 = Signal()
@@ -158,6 +169,10 @@ class I2SRxClock(Elaboratable):
         m.d.comb += self.sample_rx.eq(sck_0 & ~sck_1)
         m.d.comb += self.ck2.eq(sck_0 ^ sck_1)
         m.d.comb += self.word.eq(self.sample_rx & (self.bit == 0))
+
+        if self.owidth:
+            m.d.comb += self.l_word.eq(self.sample_rx & (self.bit == (self.width - self.owidth)))
+            m.d.comb += self.r_word.eq(self.sample_rx & (self.bit == ((self.width * 2) - self.owidth)))
 
         ws_0 = Signal()
         with m.If(self.sample_rx):
@@ -222,6 +237,46 @@ class I2SInput(Elaboratable):
 
         return m
 
-    def ports(self): return []
+#
+#
+
+class I2SInputLR(Elaboratable):
+
+    def __init__(self, rx_clock=None, width=None, name="I2SInputLR"):
+        self.name = name
+        self.rx_clock = rx_clock
+        assert rx_clock, "Must have an Rx Clock"
+
+        self.i = Signal()
+        layout = [ ("data", width), ]
+        self.left = Stream(layout=layout, name="left")
+        self.right = Stream(layout=layout, name="right")
+
+        self.sr = Signal(width)
+
+    def elaborate(self, platform):
+        m = Module()
+
+        # Tx outputs
+        for s in [ self.left, self.right ]:
+            with m.If(s.valid & s.ready):
+                m.d.sync += s.valid.eq(0)
+
+        with m.If(self.rx_clock.sample_rx):
+            m.d.sync += self.sr.eq(Cat(self.i, self.sr))
+
+        with m.If(self.rx_clock.l_word):
+            m.d.sync += [
+                self.left.valid.eq(1),
+                self.left.data.eq(self.sr),
+            ]
+
+        with m.If(self.rx_clock.r_word):
+            m.d.sync += [
+                self.right.valid.eq(1),
+                self.right.data.eq(self.sr),
+            ]
+
+        return m
 
 #   FIN

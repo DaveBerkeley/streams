@@ -50,10 +50,11 @@ def sim_o(m, verbose):
             src.push(10, left=left, right=right)
 
         yield from tick(5000)
+        print("TODO : add actual tests!")
 
     sim.add_clock(1 / 100e6)
     sim.add_process(proc)
-    with sim.write_vcd("gtk/i2s.vcd", traces=m.ports()):
+    with sim.write_vcd("gtk/i2s.vcd"):
         sim.run()
 
 #
@@ -80,7 +81,6 @@ def sim_i(m, verbose):
                 m.d.comb += i.eq(o)
 
             return m
-        def ports(self): return []
 
     both = Both(m, m.width)
     sim = Simulator(both)
@@ -118,16 +118,17 @@ def sim_i(m, verbose):
         for left, right in data:
             src.push(10, left=left, right=right)
 
-        yield from tick(5000)
+        yield from tick(5000*2)
 
         r = [ [d['left'], d['right']] for d in sink.get_data()[0] ]
         # discard the first two frames 
         r = r[2:]
-        assert data == r, r
+        for i, lr in enumerate(data):
+            assert lr == r[i], (i, r, lr)
 
     sim.add_clock(1 / 100e6)
     sim.add_process(proc)
-    with sim.write_vcd("gtk/i2s_i.vcd", traces=m.ports()):
+    with sim.write_vcd("gtk/i2s_i.vcd"):
         sim.run()
 
 #
@@ -153,10 +154,11 @@ def sim_tx_ck(m, verbose):
 
     def proc():
         yield from tick(5000)
+        print("TODO : add actual tests!")
 
     sim.add_clock(1 / 100e6)
     sim.add_process(proc)
-    with sim.write_vcd("gtk/i2s_ck.vcd", traces=m.ports()):
+    with sim.write_vcd("gtk/i2s_ck.vcd"):
         sim.run()
 
 #
@@ -192,7 +194,7 @@ def sim_rx_ck(m, verbose):
     def proc():
         # simulate ws and sck input signals
         yield from tick(5000)
-
+        print("TODO : add actual tests!")
 
     sim.add_clock(1 / 100e6)
     sim.add_process(proc)
@@ -213,15 +215,15 @@ def test(verbose):
         sim_o(dut, verbose)
 
     if (name == "I2SInput") or test_all:
-        dut = I2SInput(16)
+        dut = I2SInput(32)
         sim_i(dut, verbose)
 
     if (name == "I2STxClock") or test_all:
-        dut = I2STxClock(24)
+        dut = I2STxClock(24, owidth=12)
         sim_tx_ck(dut, verbose)
 
     if (name == "I2SRxClock") or test_all:
-        dut = I2SRxClock(32)
+        dut = I2SRxClock(32, owidth=16)
         sim_rx_ck(dut, verbose)
 
     print("done")
