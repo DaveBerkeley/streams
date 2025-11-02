@@ -1,6 +1,7 @@
 #!/bin/env python
 
 import sys
+import random
 
 if not "." in sys.path:
     sys.path.append(".")
@@ -9,7 +10,11 @@ from amaranth import *
 from amaranth.sim import *
 
 from streams.sim import SinkSim, SourceSim
-from streams.i2s import I2SOutput, I2SInput, I2STxClock, I2SRxClock
+from streams.i2s import I2SOutput, I2SInput, I2STxClock, I2SRxClock, I2SInputLR
+
+def load_lr_data(s, t, lr):
+    for l, r in lr:
+        s.push(t, left=l, right=r)
 
 #
 #
@@ -204,6 +209,128 @@ def sim_rx_ck(m, verbose):
 #
 #
 
+class I2SInputLRTx(Elaboratable):
+
+    def __init__(self):
+        self.ck = I2STxClock(width=32, owidth=16)
+        self.tx = I2SOutput(tx_clock=self.ck, width=32)
+        self.rx = I2SInputLR(rx_clock=self.ck, width=16)
+        self.mods = [
+            self.ck, self.tx, self.rx,
+        ]
+
+        self.en = Signal()
+        self.left = self.rx.left
+        self.right = self.rx.right
+        self.i = self.tx.i
+
+    def elaborate(self, _):
+        m = Module()
+        m.submodules += self.mods
+
+        m.d.comb += [
+            self.ck.enable.eq(self.en),
+            self.rx.i.eq(self.tx.phy.sd),
+        ]
+
+        return m
+
+class I2SInputLRRx(Elaboratable):
+
+    def __init__(self):
+        self.tck = I2STxClock(width=32, owidth=16)
+        self.rck = I2SRxClock(width=32, owidth=16)
+        self.tx = I2SOutput(tx_clock=self.tck, width=32)
+        self.rx = I2SInputLR(rx_clock=self.rck, width=16)
+        self.mods = [
+            self.tck, self.rck, self.tx, self.rx,
+        ]
+
+        self.en = Signal()
+        self.left = self.rx.left
+        self.right = self.rx.right
+        self.i = self.tx.i
+
+    def elaborate(self, _):
+        m = Module()
+        m.submodules += self.mods
+
+        m.d.comb += [
+            self.tck.enable.eq(self.en),
+            self.rx.i.eq(self.tx.phy.sd),
+            self.rck.ws.eq(self.tck.ws),
+            self.rck.sck.eq(self.tck.sck),
+        ]
+
+        return m
+
+def sim_lr_tx(m, verbose):
+    print("test input_lr", m)
+
+    sim = Simulator(m)
+
+    src = SourceSim(m.i)
+    left = SinkSim(m.left)
+    right = SinkSim(m.right)
+
+    polls = [ src, left, right ]
+
+    info = {
+        "t" : 0,
+    }
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            for s in polls:
+                yield from s.poll()
+            info['t'] += 1
+            if (info['t'] % 8) == 0:
+                yield m.en.eq(1)
+            else:
+                yield m.en.eq(0)
+
+    def proc():
+        def wait_source():
+            while True:
+                if src.done():
+                    break
+                yield from tick(1)
+
+        def sample():
+            return random.randint(1, (1<<32)-1)
+
+        audio = []
+
+        for i in range(100):
+            audio.append(( sample(), sample() ))
+
+        for s in audio:
+            load_lr_data(src, 10, [ s ] )
+
+        yield from tick(20)
+        yield from wait_source()
+        yield from tick(320*2)
+
+        l = left.get_data("data")[0][1:]
+        r = right.get_data("data")[0][1:]
+        #print([ hex(x) for x in l ])
+        #print([ hex(x) for x in r ])
+        #print([ (hex(a>>16), hex(b>>16)) for a,b in audio ])
+        for i in range(0, len(l)):
+            lr = [ l[i], r[i] ]
+            a = [ (x>>16) for x in audio[i] ]
+            assert a == lr, (i, a, lr)
+
+    sim.add_clock(1 / 100e6)
+    sim.add_process(proc)
+    with sim.write_vcd("gtk/i2s_lr_tx.vcd", traces=[]):
+        sim.run()
+
+#
+#
+
 def test(verbose):
     test_all, name = True, None
     if len(sys.argv) > 1:
@@ -225,6 +352,10 @@ def test(verbose):
     if (name == "I2SRxClock") or test_all:
         dut = I2SRxClock(32, owidth=16)
         sim_rx_ck(dut, verbose)
+
+    if (name == "I2SInputLR") or test_all:
+        for dut in [ I2SInputLRTx(), I2SInputLRRx() ]:
+            sim_lr_tx(dut, verbose)
 
     print("done")
 
