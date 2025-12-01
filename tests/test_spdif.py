@@ -511,32 +511,39 @@ def draw(dut):
 
 def test(verbose):
     do_all = True
-    if do_all:
+    name = None
+
+    if len(sys.argv) > 1:
+        name = sys.argv[1]
+        do_all = False
+
+    if (name == "SubframeReader") or do_all:
         dut = SubframeReader()
         sim_subframe(dut)
 
-    if do_all:
+    if (name == "BitsReader") or do_all:
         dut = BitsReader()
         sim_bits(dut)
 
-    if do_all:
+    if (name == "BlockReader") or do_all:
         dut = BlockReader()
         sim_block(dut)
 
-    if do_all:
+    if (name == "SPDIF_Rx") or do_all:
         dut = SPDIF_Rx()
         sim_spdif(dut)
 
-    if do_all:
+    if (name == "SubframeWriter") or do_all:
         dut = SubframeWriter()
         sim_writer(dut)
 
-    if do_all:
+    if (name == "SubframeTest") or do_all:
         dut = SubframeTest()
         sim_sf(dut)
 
-    dut = SPDIF_Tx(block_size=10)
-    sim_tx(dut)
+    if (name == "SPDIF_Tx") or do_all:
+        dut = SPDIF_Tx(block_size=10)
+        sim_tx(dut)
 
     draw(dut)
 

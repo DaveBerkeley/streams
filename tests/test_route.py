@@ -573,7 +573,7 @@ def sim_collator(m, verbose):
 
         for i, (t, s, d) in enumerate(data):
             p = to_packet(d)
-            print(p)
+            #print(p)
             for x in p:
                 s.push(t, **x)
 
@@ -612,6 +612,79 @@ def sim_collator(m, verbose):
 #
 #
 
+def sim_collator_slow(m, verbose):
+    print("test collator_slow")
+    sim = Simulator(m)
+
+    src = []
+
+    for i, s in enumerate(m.i):
+        ss = SourceSim(s, verbose=verbose, name=f"i{i}")
+        src.append(ss)
+    period = 100
+    sink = SinkSim(m.o, slow=2*period//len(m.i))
+
+    polls = src + [ sink ]
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            for s in polls:
+                yield from s.poll()
+
+    def proc():
+
+        def wait_src():
+            while True:
+                yield from tick(1)
+                for s in src:
+                    if s.done():
+                        return
+
+        data = []
+
+        # alternate packets to odd/even to simulate uneven pushes to inputs
+        for i in range(10):
+            t = (i+1) * period
+            for j, s in enumerate(src):
+                d = (j << 8) + i
+                if (i % 2) == 0:
+                    # push to odd ports
+                    if (j % 2) == 1:
+                        s.push(t, data=d)
+                else:
+                    # push to even ports
+                    if (j % 2) == 0:
+                        s.push(t, data=d)
+
+        yield from tick(5)
+
+        yield from tick(20)
+        yield from wait_src()
+        yield from tick(period * 4)
+
+        d = sink.get_data("data")
+        for j, p in enumerate(d):
+            #print(j, [ hex(x) for x in p ])
+            for i, x in enumerate(p):
+                # check the top byte is the index in the packet
+                assert (x>>8) == i, (i, x)
+            # 0, 2, 4 .. should be t+1, 1, 3, 5 .. should be t
+            t = j * 2
+            for x in p[::2]:
+                assert (x & 0xff) == (t+1), (t, s)
+            for x in p[1::2]:
+                assert (x & 0xff) == t, (t, s)
+
+    sim.add_clock(1 / 100e6)
+    sim.add_process(proc)
+    with sim.write_vcd(f"gtk/collator.vcd", traces=[]):
+        sim.run()
+
+#
+#
+
 def sim_mux(m, verbose):
     print("test mux")
     sim = Simulator(m)
@@ -639,7 +712,7 @@ def sim_mux(m, verbose):
 
         for i, (t, d) in enumerate(data):
             p = to_packet(d)
-            print(p)
+            #print(p)
             for x in p:
                 src.push(t, **x)
 
@@ -743,7 +816,7 @@ def sim_spi(m, verbose):
 
         for i, (t, d) in enumerate(data):
             p = to_packet(d)
-            print(p)
+            #print(p)
             for x in p:
                 src.push(t, **x)
 
@@ -956,25 +1029,29 @@ def test(verbose):
         dut = Select(layout=layout, n=4, sink=False)
         sim_select(dut, with_sink=False, ignore_packets=True)
 
-    if test_all:
+    if  (name == "Collator") or test_all:
         dut = Collator(n=4, layout=[("data", 16)])
-        sim_collator(dut, True) 
+        sim_collator(dut, verbose) 
+
+    if  (name == "CollatorSlow") or test_all:
+        dut = Collator(n=7, layout=[("data", 16)])
+        sim_collator_slow(dut, verbose) 
 
     if test_all:
         dut = MuxDown(iwidth=32, owidth=8)
-        sim_mux(dut, True)
+        sim_mux(dut, verbose)
 
     if test_all:
         dut = SpiMux()
-        sim_spi(dut, True)
+        sim_spi(dut, verbose)
 
     if test_all:
         dut = MuxUp(iwidth=8, owidth=16)
-        sim_muxup(dut, True)
+        sim_muxup(dut, verbose)
 
     if (name == "PacketSplit") or test_all:
         dut = PacketSplit(layout=[("a", 10), ("b", 1)], n=5)
-        sim_packetsplit(dut, True)
+        sim_packetsplit(dut, verbose)
 
     from streams import dot
     dot_path = "/tmp/wifi.dot"
@@ -982,7 +1059,7 @@ def test(verbose):
     dot.graph(dut, dot_path, png_path)
     
 if __name__ == "__main__":
-    test(True)
+    test(False)
 
 
 # FIN
