@@ -150,6 +150,10 @@ class I2SRxClock(Elaboratable):
         # outputs used by I2SRx units
         self.sample_rx = Signal()  # read the data in line
         self.word = Signal()    # word complete, shift_in data is valid
+        # output used by I2STx units
+        self.sample_tx = Signal()  # tx data
+        self.ck_left = Signal()
+        self.ck_right = Signal()
 
         if owidth:
             self.l_word = Signal()
@@ -166,9 +170,17 @@ class I2SRxClock(Elaboratable):
         m.d.sync += sck_1.eq(sck_0)
 
         # Sample on the rising edge of SCK
-        m.d.comb += self.sample_rx.eq(sck_0 & ~sck_1)
-        m.d.comb += self.ck2.eq(sck_0 ^ sck_1)
-        m.d.comb += self.word.eq(self.sample_rx & (self.bit == 0))
+        m.d.comb += [
+            self.sample_rx.eq(sck_0 & ~sck_1),
+            self.ck2.eq(sck_0 ^ sck_1),
+            self.word.eq(self.sample_rx & (self.bit == 0)),
+        ]
+        # Tx on the falling edge of SCK
+        m.d.comb += [
+            self.sample_tx.eq(sck_1 & ~sck_0),
+            self.ck_left.eq(self.sample_tx & (self.bit == 0)),
+            self.ck_right.eq(self.sample_tx & (self.bit == self.width)),
+        ]
 
         if self.owidth:
             m.d.comb += self.l_word.eq(self.sample_rx & (self.bit == (self.width - self.owidth)))
