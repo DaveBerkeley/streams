@@ -737,7 +737,7 @@ class SPDIF_Tx(Elaboratable):
                     m.d.sync += [
                         self.left.eq(self.i.left << shift),
                         self.right.eq(self.i.right << shift),
-                        self.aux.eq(0), # TODO
+                        #self.aux.eq(0), # TODO
                     ]
                     with m.If(self.frame == 0):
                         m.d.sync += self.preamble.eq(PREAMBLE.B)
@@ -750,7 +750,7 @@ class SPDIF_Tx(Elaboratable):
                     tx(self.left, 0, 0, 0)
                     m.d.sync += [
                         self.preamble.eq(PREAMBLE.W),
-                        self.aux.eq(0), # TODO
+                        #self.aux.eq(0), # TODO
                     ]
                     m.next = "SF2"
 
