@@ -1,6 +1,7 @@
 #!/bin/env python3
 
 import sys
+import struct
 
 from amaranth import *
 
@@ -277,6 +278,106 @@ def sim_spdif(m):
 #
 #
 
+def read_raw_spdif(path, size):
+    r = []
+    for line in open(path):
+        line = line.strip()
+        if not line.startswith("data:"):
+            continue
+        parts = line[5:].split()
+        for part in parts:
+            for bit in part:
+                r.append(int(bit))
+        if len(r) >= size:
+            break
+    return r
+
+def sim_decode(m, mout, gtk):
+    print("test decode")
+    sim = Simulator(m)
+
+    sink = SinkSim(mout)
+
+    # read bits from test file
+    path = "tests/raw_spdif.csv"
+    data = read_raw_spdif(path, size=500000)
+    print("reading", len(data), "bits")
+    info = {
+        'idx' : 0,
+        'done' : False,
+    }
+
+    def tick(n=1):
+        assert n
+        for i in range(n):
+            yield Tick()
+            yield from sink.poll()
+            yield m.i.eq(data[info['idx']])
+            info['idx'] += 1
+
+    def proc():
+
+        while info['idx'] < len(data):
+            yield from tick(1)
+            if (info['idx'] % 1000) == 0:
+                print('.', end='')
+        print()
+
+        path = "/tmp/decode.csv"
+        ofile = open(path, "w")
+        block = None
+
+        d = sink.get_data()
+        if 'left' in [ x[0] for x in sink._layout ]:
+            block_reader = True
+        else:
+            block_reader = False
+
+        def to_32(audio):
+            # 20-bit to signed 32-bit conversion
+            if audio & (1 << 19):
+                # sign extend to 32-bit
+                audio |= 0xfff0_0000
+            r = struct.pack("I", audio)
+            audio = struct.unpack("i", r)[0]
+            return audio
+
+        if block_reader:
+            for p in d:
+                for item in p:
+                    left, right = [ to_32(x) for x in [ item['left'], item['right' ] ] ]
+                    print("0", left, right, file=ofile)
+
+        # SubframeReader decode
+        if not block_reader:
+            for p in d:
+                for item in p:
+                    preamble, audio, c = item['preamble'], item['audio'], item['C']
+                    if block is None:
+                        # wait for the first preamble
+                        if preamble != 2:
+                            continue
+                        block = True
+                    audio = to_32(audio)
+                    if preamble == 1:
+                        print(audio, file=ofile)
+                    else:
+                        print(preamble, audio, end=' ', file=ofile)
+
+        # launch gnuplot graph to eyeball the data : 2 sinewaves
+        ofile.close()
+        cmd = "plot '/tmp/decode.csv' u 2 w l, '' u 3 w l"
+        import subprocess
+        subprocess.call(f"gnuplot -e \"{cmd}\" -persist", shell=True)
+
+    sim.add_clock(1 / 50e6)
+    sim.add_process(proc)
+    with sim.write_vcd(gtk, traces=[]):
+        sim.run()
+
+#
+#
+
 def sim_writer(m):
     print("test writer")
     sim = Simulator(m)
@@ -532,6 +633,14 @@ def test(verbose):
     if (name == "SPDIF_Rx") or do_all:
         dut = SPDIF_Rx()
         sim_spdif(dut)
+
+    if (name == "SPDIF_decode_sf") or do_all:
+        dut = SubframeReader()
+        sim_decode(dut, dut.o, "gtk/spdif_decode.vcd")
+
+    if (name == "SPDIF_decode") or do_all:
+        dut = SPDIF_Rx()
+        sim_decode(dut, dut.audio, "gtk/spdif_decode_rx.vcd")
 
     if (name == "SubframeWriter") or do_all:
         dut = SubframeWriter()
