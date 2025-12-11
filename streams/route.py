@@ -47,6 +47,7 @@ class Head(Elaboratable):
 
         self.end = Const(n-1)
         self.idx = Signal(range(n+1))
+        self.max_idx = Signal(range(n+1))
         self.copied = Signal()
         self.first = Signal()
 
@@ -101,15 +102,19 @@ class Head(Elaboratable):
                     ]
 
                 with m.If(self.i.last):
-                    m.d.sync += self.idx.eq(0)
-                    m.d.sync += self.valid.eq(1)
+                    m.d.sync += [
+                        self.idx.eq(0),
+                        self.valid.eq(1),
+                        self.max_idx.eq(self.idx),
+                    ]
 
                 with m.If(self.idx == self.end):
                     with m.If(~self.i.last):
                         m.d.sync += [
                             self.copied.eq(1),
                             self.first.eq(1),
-                            self.valid.eq(1)
+                            self.valid.eq(1),
+                            self.max_idx.eq(self.idx),
                         ]
 
             with m.Else():
