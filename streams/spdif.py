@@ -533,9 +533,9 @@ class SPDIF_Rx(Elaboratable):
     def __init__(self, width=16):
         self.i = Signal()
         self.audio = Stream(layout=audio_layout, name="audio")
-        self.status = Stream(layout=status_layout, name="status")
-        self.user = Stream(layout=status_layout, name="user")
-        self.aux = Stream(layout=aux_layout, name="aux")
+        #self.status = Stream(layout=status_layout, name="status")
+        #self.user = Stream(layout=status_layout, name="user")
+        #self.aux = Stream(layout=aux_layout, name="aux")
 
         self.subframe_reader = SubframeReader()
         self.block_reader = BlockReader()
@@ -552,9 +552,9 @@ class SPDIF_Rx(Elaboratable):
         m.d.comb += self.subframe_reader.i.eq(self.i)
         m.d.comb += Stream.connect(self.subframe_reader.o, self.block_reader.i)
         m.d.comb += Stream.connect(self.block_reader.audio, self.audio)
-        m.d.comb += Stream.connect(self.block_reader.status, self.status)
-        m.d.comb += Stream.connect(self.block_reader.user, self.user)
-        m.d.comb += Stream.connect(self.block_reader.aux, self.aux)
+        #m.d.comb += Stream.connect(self.block_reader.status, self.status)
+        #m.d.comb += Stream.connect(self.block_reader.user, self.user)
+        #m.d.comb += Stream.connect(self.block_reader.aux, self.aux)
 
         return m
 
@@ -711,7 +711,7 @@ class SPDIF_Tx(Elaboratable):
         with m.If(self.i.ready & self.i.valid):
             m.d.sync += self.i.ready.eq(0)
 
-        def tx(audio, v, u, c):
+        def tx(audio, v, u):
             m.d.sync += [
                 self.wr.i.valid.eq(1),
                 self.wr.i.preamble.eq(self.preamble),
@@ -719,7 +719,10 @@ class SPDIF_Tx(Elaboratable):
                 self.wr.i.audio.eq(audio),
                 self.wr.i.V.eq(v),
                 self.wr.i.U.eq(u),
-                self.wr.i.C.eq(c),
+                # I'm a bit hazy about the channel status bits.
+                # But this is what my PC card puts out.
+                # And if I do this then the Rx works too.
+                self.wr.i.C.eq((self.frame == 2) | (self.frame == 25)),
             ]
 
         shift = self.bits - self.iwidth
@@ -747,7 +750,7 @@ class SPDIF_Tx(Elaboratable):
 
             with m.State("SF1"):
                 with m.If(~self.wr.i.valid):
-                    tx(self.left, 0, 0, 0)
+                    tx(self.left, 0, 0)
                     m.d.sync += [
                         self.preamble.eq(PREAMBLE.W),
                         #self.aux.eq(0), # TODO
@@ -756,7 +759,7 @@ class SPDIF_Tx(Elaboratable):
 
             with m.State("SF2"):
                 with m.If(~self.wr.i.valid):
-                    tx(self.right, 0, 0, 0)
+                    tx(self.right, 0, 0)
                     m.d.sync += self.frame.eq(self.frame + 1)
                     with m.If(self.frame == (self.block_size-1)):
                         m.d.sync += self.frame.eq(0)
