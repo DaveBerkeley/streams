@@ -582,7 +582,7 @@ def sim_tx(m):
 
         data = []
 
-        for i in range(40):
+        for i in range(200):
             data.append((10, 0x1234 + i, i))
 
         for t, left, right in data:
@@ -651,7 +651,7 @@ def test(verbose):
         sim_sf(dut)
 
     if (name == "SPDIF_Tx") or do_all:
-        dut = SPDIF_Tx(block_size=10)
+        dut = SPDIF_Tx() # block_size=10)
         sim_tx(dut)
 
     draw(dut)
