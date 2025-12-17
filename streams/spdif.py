@@ -414,15 +414,19 @@ class BitsReader(Elaboratable):
 
 class BlockReader(Elaboratable):
 
-    def __init__(self):
+    def __init__(self, with_user=True, with_status=True):
+        self.mods = []
         self.i = Stream(layout=subframe_layout, name="i")
         self.audio = Stream(layout=audio_layout, name="audio")
-        self.status = Stream(layout=status_layout, name="status")
-        self.user = Stream(layout=status_layout, name="user")
         self.aux = Stream(layout=status_layout, name="aux")
-
-        self.status_reader = BitsReader()
-        self.user_reader = BitsReader()
+        if with_user:
+            self.user = Stream(layout=status_layout, name="user")
+            self.user_reader = BitsReader()
+            self.mods += [ self.user_reader ]
+        if with_status:
+            self.status = Stream(layout=status_layout, name="status")
+            self.status_reader = BitsReader()
+            self.mods += [ self.status_reader ]
 
         self.FRAMES = 192
         self.frame = Signal(range(self.FRAMES + 1))
@@ -435,17 +439,14 @@ class BlockReader(Elaboratable):
         self.chan_b_ok = Signal()
         self.tx = Signal()
 
-        self.mods = [
-            self.status_reader,
-            self.user_reader,
-        ]
-
     def elaborate(self, platform):
         m = Module()
         m.submodules += self.mods
 
-        m.d.comb += Stream.connect(self.status_reader.o, self.status)
-        m.d.comb += Stream.connect(self.user_reader.o, self.user)
+        if hasattr(self, "status"):
+            m.d.comb += Stream.connect(self.status_reader.o, self.status)
+        if hasattr(self, "user"):
+            m.d.comb += Stream.connect(self.user_reader.o, self.user)
 
         # Tx audio output
         with m.If(self.audio.valid & self.audio.ready):
@@ -530,7 +531,7 @@ class BlockReader(Elaboratable):
 
 class SPDIF_Rx(Elaboratable):
 
-    def __init__(self, width=16):
+    def __init__(self, width=16, with_user=True, with_status=True):
         self.i = Signal()
         self.audio = Stream(layout=audio_layout, name="audio")
         #self.status = Stream(layout=status_layout, name="status")
@@ -538,7 +539,7 @@ class SPDIF_Rx(Elaboratable):
         #self.aux = Stream(layout=aux_layout, name="aux")
 
         self.subframe_reader = SubframeReader()
-        self.block_reader = BlockReader()
+        self.block_reader = BlockReader(with_user=with_user, with_status=with_status)
 
         self.mods = [
             self.subframe_reader,
