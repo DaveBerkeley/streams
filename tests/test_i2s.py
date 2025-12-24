@@ -140,26 +140,49 @@ def sim_i(m, verbose):
 #
 
 def sim_tx_ck(m, verbose):
-    print("test i2s tx clock")
+    print(f"test i2s tx clock w={m.width} ow={m.owidth}")
 
     sim = Simulator(m)
 
-    info = { "t" : 0 }
+    info = { 
+        "t" : 0, # clock enable
+        "bits" : 0,
+        "prev_sck" : 0,
+    }
 
     def tick(n=1):
         assert n
         for i in range(n):
             yield Tick()
-
             info['t'] += 1
             if ((info['t'] % 10) == 0):
                 yield m.enable.eq(1)
             else:
                 yield m.enable.eq(0)
 
+            # count sck hi to lo transitions
+            sck = yield m.sck
+            if info['prev_sck'] and not sck:
+                info['bits'] += 1
+            info['prev_sck'] = sck
+
+            ws = yield m.ws
+            if (ws != info.get('prev_ws', ws)):
+                # check we have the correct number of sck bits in each channel
+                assert info['bits'] == m.width, (info['bits'], m.width)
+                info['bits'] = 0
+            info['prev_ws'] = ws
+
+            d = yield m.l_word
+            r = (m.owidth+1) % m.width
+            if d:
+                assert info['bits'] == r, (r, info)
+            d = yield m.r_word
+            if d:
+                assert info['bits'] == r, (r, info)
+
     def proc():
         yield from tick(5000)
-        print("TODO : add actual tests!")
 
     sim.add_clock(1 / 100e6)
     sim.add_process(proc)
@@ -346,8 +369,9 @@ def test(verbose):
         sim_i(dut, verbose)
 
     if (name == "I2STxClock") or test_all:
-        dut = I2STxClock(24, owidth=12)
-        sim_tx_ck(dut, verbose)
+        for w, ow in [ (24, 12), (24, 24), (32, 16), (32, 32) ]:
+            dut = I2STxClock(w, owidth=ow)
+            sim_tx_ck(dut, verbose)
 
     if (name == "I2SRxClock") or test_all:
         dut = I2SRxClock(32, owidth=16)

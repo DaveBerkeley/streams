@@ -1,7 +1,5 @@
 #!/bin/env python3
 
-#   TODO : work in progress
-
 from amaranth import *
 
 from streams import Stream
@@ -51,7 +49,7 @@ class I2STxClock(Elaboratable):
         bit = Signal(range(self.width * 2))
 
         m.d.comb += [
-            self.ws.eq(bit[-1]),
+            self.ws.eq(bit >= self.width),
             self.sample_tx.eq(self.enable & half),
             self.ck_left.eq(self.sample_tx & (bit == 0)),
             self.ck_right.eq(self.sample_tx & (bit == self.width)),
@@ -60,10 +58,17 @@ class I2STxClock(Elaboratable):
             self.sample_rx.eq(self.enable & ~half),
             self.word.eq(self.sample_rx & (bit == 1)),
         ]
+
         if self.owidth:
-            m.d.comb += [
-                self.l_word.eq(self.sample_rx & (bit == (1+self.owidth))),
-                self.r_word.eq(self.sample_rx & (bit == (1+self.width+self.owidth))),
+            m.d.sync += [
+                self.l_word.eq(0),
+                self.r_word.eq(0),
+            ]
+            l_idx = self.owidth
+            r_idx = (self.width + self.owidth) % (2 * self.width)
+            m.d.sync += [
+                self.l_word.eq(self.sample_rx & (bit == (1+l_idx))),
+                self.r_word.eq(self.sample_rx & (bit == (1+r_idx))),
             ]
 
         with m.If(self.enable):
@@ -76,6 +81,8 @@ class I2STxClock(Elaboratable):
                     bit.eq(bit + 1),
                     self.sck.eq(0),
                 ]
+                with m.If(bit == ((self.width * 2)-1)):
+                    m.d.sync += bit.eq(0)
 
         return m
 
