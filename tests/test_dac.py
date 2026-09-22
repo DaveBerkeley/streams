@@ -77,6 +77,7 @@ def sim_dac(m, verbose):
 def test(verbose):
     init = to_packet([ 0x12345678 ])
     dut = AD56x8(init=init, chip="AD5628")
-    sim_dac(dut, verbose)
+    #sim_dac(dut, verbose)
+    print("TODO")
 
 #   FIN

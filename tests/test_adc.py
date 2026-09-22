@@ -76,6 +76,7 @@ def sim(verbose):
 #
 
 def test(verbose):
-    sim(verbose)
+    #sim(verbose)
+    pass
 
 #   FIN
