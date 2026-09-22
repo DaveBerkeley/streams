@@ -13,6 +13,13 @@ class Phy:
         self.sck = Signal()
         self.sd = Signal()
 
+    def eq(self, phy):
+        return [
+            self.ws.eq(phy.ws),
+            self.sck.eq(phy.sck),
+            self.sd.eq(phy.sd),
+        ]
+
 #
 #
 
