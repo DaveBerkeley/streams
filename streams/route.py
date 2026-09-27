@@ -138,7 +138,15 @@ class Router(Elaboratable):
 
     def __init__(self, layout, addr_field, addrs=[], name="Router", sink=None):
         self.name = name
+
+        # Addrs can either be a list of numbers for routes, or a dict of label:num
         assert len(addrs)
+        if isinstance(addrs, dict):
+            names = [ f"{v}_{k}" for k, v in addrs.items() ]
+            addrs = list(addrs.values())
+        else:
+            names = [ f"o_{n}" for n in addrs ]
+
         get_field(addr_field, layout) # assert
         self.field = addr_field
         self.addrs = addrs[:]
@@ -162,8 +170,8 @@ class Router(Elaboratable):
 
         self.o = {}
 
-        for addr in addrs:
-            s = Stream(layout=layout, name=f"o_{addr}")
+        for i, addr in enumerate(addrs):
+            s = Stream(layout=layout, name=names[i])
             assert not addr in self.o
             self.o[addr] = s
             # .. so the dot code can find the Stream
