@@ -104,15 +104,15 @@ def sim_head(m, n):
 #
 #
 
-def sim_router(m, addrs):
-    print("test router", addrs)
+def sim_router(m, addrs, slow):
+    print("test router", addrs, "slow=", slow)
     sim = Simulator(m)
 
     esink = SinkSim(m.e)
     src = SourceSim(m.i)
     sinks = {}
     for addr in addrs:
-        s = SinkSim(m.o[addr])
+        s = SinkSim(m.o[addr], slow=slow)
         sinks[addr] = s
 
     def tick(n=1):
@@ -145,7 +145,7 @@ def sim_router(m, addrs):
             if src.done():
                 break
 
-        yield from tick(5)
+        yield from tick(5 + slow)
 
         # route the packets manually into a dict
         route = {}
@@ -154,8 +154,9 @@ def sim_router(m, addrs):
             s = sinks.get(addr, esink)
             route[s] = route.get(s, []) + [ packet ]
 
-        for s in route.keys():
-            assert route[s] == s.get_data("data"), (s, route[s], s.get_data("data"))
+        for s, px in route.items():
+            r = s.get_data("data")
+            assert px == r, (px, r)
 
         print("pass")
             
@@ -994,11 +995,12 @@ def test(verbose):
         dut = Head(layout=layout, data_field="data", n=3)
         sim_head(dut, n)
 
-    if test_all:
+    if test_all or (name=="Router"):
         layout = [("data", 16)]
         addrs = [ 1, 0x10, 0x20 ]
         dut = Router(layout=layout, addr_field="data", addrs=addrs)
-        sim_router(dut, addrs)
+        for slow in [ 10, 0, 100 ]:
+            sim_router(dut, addrs, slow)
 
     if test_all:
         layout = [("data", 16)]

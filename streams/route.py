@@ -136,8 +136,11 @@ class Router(Elaboratable):
     typically require a Sink on it.
     """
 
-    def __init__(self, layout, addr_field, addrs=[], name="Router", sink=None):
+    def __init__(self, layout, addr_field="data", addrs=[], name="Router", sink=None):
         self.name = name
+        self.mods = []
+        self.connects = []
+        self.addr_field = addr_field
 
         # Addrs can either be a list of numbers for routes, or a dict of label:num
         assert len(addrs)
@@ -147,86 +150,86 @@ class Router(Elaboratable):
         else:
             names = [ f"o_{n}" for n in addrs ]
 
-        get_field(addr_field, layout) # assert
-        self.field = addr_field
-        self.addrs = addrs[:]
-        self.mods = []
+        assert addr_field in [ x[0] for x in layout ]
 
         self.i = Stream(layout=layout, name="i") # input
         self.e = Stream(layout=layout, name="e") # error stream
-        self.null = Stream(layout=layout, name="null") # null stream
-        self.route_mask = Signal(len(addrs))
-        self.ready = Signal(1 + len(self.addrs)) # outputs + error
-        self.error = Signal()
-
-        self.head = Head(layout, data_field=addr_field)
-        self.mods += [ self.head ]
 
         if sink is True:
             self.sink = Sink(layout=layout)
             self.mods += [ self.sink ]
+            self.connects = [ (self.e, self.sink.i) ]
         elif isinstance(sink, list):
             sink.append(self.e)
 
-        self.o = {}
+        # need to map input values to outputs
+        self.addrs = addrs[:]
+        self.addrs.sort()
 
-        for i, addr in enumerate(addrs):
-            s = Stream(layout=layout, name=names[i])
-            assert not addr in self.o
+        self.o = {}
+        streams = [ self.e ]
+        for i, addr in enumerate(self.addrs):
+            name = names[i]
+            s = Stream(layout=layout, name=name)
+            streams.append(s)
             self.o[addr] = s
             # .. so the dot code can find the Stream
             name = f"_o_{addr}"
             setattr(self, name, s)
 
-    def elaborate(self, platform):
-        m = Module()
+        self.s = Array(streams)
+        self.route = Signal(range(len(streams)))
+        self.first = Signal()
 
+        w = self.i.cat_payload(flags=False).shape().width
+        self.payload = Signal(w)
+
+    def elaborate(self, _):
+        m = Module()
         m.submodules += self.mods
 
-        m.d.comb += Stream.connect(self.i, self.head.i)
+        for a, b in self.connects:
+            m.d.comb += Stream.connect(a, b)
 
-        o = self.head.o
+        m.d.comb += self.payload.eq(self.i.cat_payload(flags=False))
 
-        def connect(s, enable):
-            with m.If(enable):
-                m.d.comb += Stream.connect(self.head.o, s, exclude=["ready"])
-            with m.Else():
-                m.d.comb += Stream.connect(self.null, s, exclude=["ready"])
+        # Transmit all outputs, starting with self.e
+        for i in range(len(self.s)):
+            with m.If(self.s[i].valid & self.s[i].ready):
+                m.d.sync += self.s[i].valid.eq(0)
 
-        for idx, addr in enumerate(self.addrs):
-            connect(self.o[addr], self.route_mask[idx] & self.head.more)
+        with m.FSM(reset="idle"):
 
-        connect(self.e, self.error & self.head.more)
+            with m.State("idle"):
+                with m.If(~self.i.ready):
+                    m.d.sync += self.i.ready.eq(1)
+                with m.If(self.i.valid & self.i.ready):
+                    m.d.sync += self.i.ready.eq(0)
+                    with m.If(self.i.first):
+                        m.d.sync += self.route.eq(0)
+                        for i, addr in enumerate(self.addrs):
+                            d = getattr(self.i, self.addr_field)
+                            with m.If(d == addr):
+                                m.d.sync += self.route.eq(i+1)
+                        m.d.sync += self.first.eq(1)
+                        m.next = "xfer"
 
-        # the 'ready' signal back is the OR of each gated output+error
-
-        for idx, addr in enumerate(self.addrs):
-            s = self.o[addr]
-            m.d.comb += self.ready[idx].eq(self.route_mask[idx] & s.ready)
-        m.d.comb += self.ready[-1].eq(self.error & self.e.ready & self.head.more)
-
-        m.d.comb += o.ready.eq(self.ready.any())
-
-        if hasattr(self, "sink"):
-            m.d.comb += Stream.connect(self.e, self.sink.i)
-
-        with m.FSM():
-            with m.State("IDLE"):
-                m.d.sync += self.route_mask.eq(0)
-                m.d.sync += self.error.eq(0)
-                with m.If(self.head.more):
-                    m.d.sync += self.error.eq(1)
-                    for idx, addr in enumerate(self.addrs):
-                        with m.If(addr == self.head.head[0]):
-                            m.d.sync += self.route_mask.eq(1 << idx)
-                            m.d.sync += self.error.eq(0)
-                    m.next = "COPY"
-
-            with m.State("COPY"):
-                with m.If(o.valid & o.ready & o.last):
-                    m.d.sync += self.route_mask.eq(0)
-                    m.d.sync += self.error.eq(0)
-                    m.next = "IDLE"
+            with m.State("xfer"):
+                with m.If(~self.i.ready & ~self.s[self.route].valid):
+                    m.d.sync += self.i.ready.eq(1)
+                with m.If(self.i.valid & self.i.ready):
+                    m.d.sync += [
+                        self.i.ready.eq(0),
+                        self.s[self.route].valid.eq(1),
+                        self.s[self.route].last.eq(self.i.last),
+                        self.s[self.route].first.eq(self.first),
+                        self.first.eq(0),
+                    ]
+                    for i in range(len(self.s)):
+                        with m.If(self.route == i):
+                            m.d.sync += self.s[i].payload_eq(self.payload, flags=False)
+                    with m.If(self.i.last):
+                        m.next = "idle"
 
         return m
 

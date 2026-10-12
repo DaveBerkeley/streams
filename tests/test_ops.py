@@ -49,7 +49,7 @@ def sim_ops(m, check, vcd, verbose):
         check(data, sink.get_data("data"))
 
     sim.add_clock(1 / 100e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     with sim.write_vcd("gtk/" + vcd, traces=m.ports()):
         sim.run()
 
@@ -126,7 +126,7 @@ def sim_sum(m, check, vcd, verbose):
         check(data, sink.get_data("data"))
 
     sim.add_clock(1 / 100e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     with sim.write_vcd("gtk/" + vcd, traces=m.ports()):
         sim.run()
 
@@ -173,7 +173,7 @@ def sim_unary(m, fn, verbose, title, vcd, data):
         fn(p)
 
     sim.add_clock(1 / 100e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     with sim.write_vcd("gtk/" + vcd):
         sim.run()
 
@@ -267,7 +267,7 @@ def sim_const(m, verbose):
             assert packet == [ 123 ]
 
     sim.add_clock(1 / 100e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     with sim.write_vcd("gtk/const.vcd"):
         sim.run()
 
@@ -324,7 +324,7 @@ def sim_bit_change(m, verbose):
             assert t == pp, (t, pp)
 
     sim.add_clock(1 / 100e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     with sim.write_vcd("gtk/bit_change.vcd"):
         sim.run()
 
@@ -366,7 +366,7 @@ def sim_decimate(m, verbose):
         assert rb == xb, (rb, xb)
 
     sim.add_clock(1 / 100e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     with sim.write_vcd("gtk/decimate.vcd"):
         sim.run()
 
@@ -404,7 +404,7 @@ def sim_max(m, verbose):
         assert r == [ [ 1, 3, 10, 100, 2000 ] ], r
 
     sim.add_clock(1 / 100e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     with sim.write_vcd("gtk/max.vcd"):
         sim.run()
 
@@ -461,7 +461,7 @@ def sim_enum(m, verbose):
         assert a[2] == [ 3, 4, 5, 6, 7 ], a[2]
 
     sim.add_clock(1 / 50e6)
-    sim.add_sync_process(proc)
+    sim.add_process(proc)
     with sim.write_vcd("gtk/enum.vcd", traces=[]):
         sim.run()
 
